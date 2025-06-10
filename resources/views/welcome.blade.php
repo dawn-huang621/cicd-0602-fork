@@ -65,7 +65,7 @@
     </head>
     <body>
 
-    test auto deploy test 2
+    test auto deploy test 3
         <div class="flex-center position-ref full-height">
             @if (Route::has('login'))
                 <div class="top-right links">
