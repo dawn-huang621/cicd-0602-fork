@@ -3,7 +3,7 @@ name: Deploy to Render
 on:
   push:
     branches:
-      - main  # 或你設定的部署分支
+      - master  # 或你設定的部署分支
 
 jobs:
   deploy:
