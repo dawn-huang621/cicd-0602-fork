@@ -18,12 +18,7 @@ COPY . .
 
 # 安裝 curl、bash、Node.js
 RUN apt-get update && \
-    apt-get install -y curl gnupg bash && \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs
-
-# 安裝 Node.js（加入 Vite 編譯支援）
-RUN apt-get update && \
+    apt-get install -y curl ca-certificates gnupg lsb-release && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs
 
