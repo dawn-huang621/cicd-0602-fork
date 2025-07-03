@@ -11,16 +11,15 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     
     Route::prefix('product')->group(function () {
-        Route::get('/', function () {
-            return view('product.list');
-        })->name('product');
-        Route::get('/new', [ProductController::class, 'new'])->name('product-new');
- 
+        Route::get('/index', [ProductController::class, 'index'])->name('product.list');
+        Route::get('/create', [ProductController::class, 'create'])->name('product.new');
+        Route::get('/store', [ProductController::class, 'store'])->name('product.store');
     });
 
     Route::prefix('order')->group(function () {
             
-        Route::get('/', function () { return view('order.list');})->name('order');
+        // Route::get('/', function () { return view('order.list');})->name('order');
+        Route::get('/order', [ProductController::class, 'list'])->name('order-list');
  
     });
 
