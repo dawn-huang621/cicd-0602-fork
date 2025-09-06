@@ -5,13 +5,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use DB;
 use App\Models\Product;
+use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
 {
     function index()
     {
         $result = DB::table('products')->get();
-        return view('product.list', ['products' => $result]);
+        return view('product.index', ['products' => $result]);
     }
 
     function create()
@@ -23,13 +24,12 @@ class ProductController extends Controller
     {
         try{
             // 驗證
-            Validator::make(
+            $validator = Validator::make(
                 $request->all(), 
                 [
-                
-                    'name' => 'required|string|unique|max:30',
+                    'name' => 'required|string|unique:products,name|max:30',
                     'price' => 'required|string',
-                    'name' => 'required|text'
+                    'description' => 'required|string'
                 ], 
                 [
                     'name' => 'product.name',
@@ -50,7 +50,7 @@ class ProductController extends Controller
             ]);
             if($result){
                 // 存入
-                return view('product.index');
+                return redirect('product/index');
             } else {
                 return redirect('product/create')
                         ->withErrors($validator)

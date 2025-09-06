@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('產品列表') }}
+            {{ __('客戶列表') }}
         </h2>
     </x-slot>
 
@@ -18,7 +18,7 @@
                         </div>
                         <!-- Navigation Links -->
                         <div class="relative w-full px-4 max-w-full flex-grow flex-1 text-right">
-                        <x-nav-link class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('product.new')">新增產品</x-nav-link>
+                        <x-nav-link class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('customer.new')">新增客戶</x-nav-link>
                         
                         </div>
                     </div>
@@ -29,35 +29,28 @@
                         <thead>
                         <tr>
                             <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                                        Page name
+                                        客戶名稱
                                         </th>
                         <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                                        Visitors
+                                        電話
                                         </th>
                         <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                                        Unique users
-                                        </th>
-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                                        Bounce rate
+                                        統一編號
                                         </th>
                         </tr>
                         </thead>
 
                         <tbody>
-                            @foreach($products as $product)
+                            @foreach($customers as $customer)
                             <tr>
                                 <th class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-left text-blueGray-700 ">
-                                {{  $product->name  }}
+                                {{  $customer->name  }}
                                 </th>
                                 <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 ">
-                                {{  $product->price}}
+                                {{  $customer->phone}}
                                 </td>
                                 <td class="border-t-0 px-6 align-center border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
-                                {{  $product->description }}
-                                </td>
-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
-                                <i class="fas fa-arrow-up text-emerald-500 mr-4"></i>
-                                {{  $product->created_at }}
+                                {{  $customer->tax_id_number }}
                                 </td>
                             </tr>
                             @endforeach

@@ -15,6 +15,7 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased">
+
         <div class="min-h-screen bg-gray-100">
             @include('layouts.navigation')
 
@@ -28,9 +29,13 @@
             @endisset
 
             <!-- Page Content -->
+            <div class="max-w-7xl mx-auto mt-4 px-4">
+                @include('components.error-messages')
+            </div>
             <main>
                 {{ $slot }}
             </main>
         </div>
+        @yield('jshead')
     </body>
 </html>
