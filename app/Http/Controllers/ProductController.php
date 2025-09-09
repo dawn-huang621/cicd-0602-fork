@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
 {
-    function index()
+    function list()
     {
         $result = DB::table('products')->get();
         return view('product.index', ['products' => $result]);

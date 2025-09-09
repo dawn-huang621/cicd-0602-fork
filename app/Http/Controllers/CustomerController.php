@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Validator;
 
 class CustomerController extends Controller
 {
-    function index()
+    function list()
     {
         $result = DB::table('customers')->get();
         return view('customer.index', ['customers' => $result]);

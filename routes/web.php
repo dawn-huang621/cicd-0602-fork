@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\CustomerController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -11,23 +13,25 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     
     Route::prefix('product')->group(function () {
-        Route::get('/index', [ProductController::class, 'index'])->name('product.list');
+        Route::get('/index', [ProductController::class, 'list'])->name('product.list');
         Route::get('/create', [ProductController::class, 'create'])->name('product.new');
-        Route::get('/store', [ProductController::class, 'store'])->name('product.store');
+        Route::post('/store', [ProductController::class, 'store'])->name('product.store');
     });
 
     Route::prefix('order')->group(function () {
             
         // Route::get('/', function () { return view('order.list');})->name('order');
-        Route::get('/order', [ProductController::class, 'list'])->name('order-list');
+        Route::get('/index', [OrderController::class, 'list'])->name('order.list');
+        Route::get('/create', [OrderController::class, 'create'])->name('order.new');
+        Route::post('/store', [OrderController::class, 'store'])->name('order.store');
+        Route::get('/show', [OrderController::class, 'show'])->name('order.show');
  
     });
 
     Route::prefix('customer')->group(function () {
-          
-        Route::get('/', function () {
-            return view('customer.list');
-        })->name('customer');
+        Route::get('/index', [CustomerController::class, 'list'])->name('customer.list');
+        Route::get('/create', [CustomerController::class, 'create'])->name('customer.new');
+        Route::post('/store', [CustomerController::class, 'store'])->name('customer.store');
     });
 });
 

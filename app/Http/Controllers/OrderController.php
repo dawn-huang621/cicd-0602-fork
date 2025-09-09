@@ -13,12 +13,13 @@ use App\Http\Requests\StoreOrderRequest;
 
 class OrderController extends Controller
 {
-    function index()
+    function list()
     {
         $result = DB::table('orders')->get();
         foreach($result as $order){
             $order->order_number = 'O'. $order->order_number;
         }
+        // dd('ggg');
         return view('order.index', ['orders' => $result]);
     }
 
