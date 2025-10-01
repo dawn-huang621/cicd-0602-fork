@@ -5,12 +5,10 @@ namespace App\Models;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Product extends Authenticatable
+class StockMovement extends Authenticatable
 {
     use Notifiable;
-    use HasFactory;
 
     /**
      * The attributes that are mass assignable.
@@ -18,7 +16,7 @@ class Product extends Authenticatable
      * @var array
      */
     protected $fillable = [
-        'name', 'price', 'amount', 'description'
+        'product_id', 'order_id', 'user_id', 'type', 'balance', 'quantity'
     ];
 
     /**
@@ -36,4 +34,5 @@ class Product extends Authenticatable
      */
     protected $casts = [
     ];
+
 }

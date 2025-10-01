@@ -1,3 +1,33 @@
+<head>
+    <script>
+        function decideOrderStatus(approved, id){
+            $.ajax({
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                url: "{{ route('orders.review', ['id' => ':id']) }}".replace(':id', id),
+                type: 'POST',
+                dataType: 'json',
+                data: { 
+                    orderId: Number(id),
+                    approved: approved
+                },
+                success: function(response) {
+                    console.log(response);
+                    // alert('訂單已通過');
+                    if(response.status == 'success'){
+                        window.location.reload();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.log(xhr, status, error);
+                    alert('訂單審核失敗');
+                }
+            });
+        }
+    </script>
+</head>
+
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
@@ -35,6 +65,14 @@
                                         建立時間
                                         </th>
                         <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+                                        訂單狀態
+                                        </th>
+                                        @if($canApprove)
+                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+                                        審核
+                                        </th>
+                                        @endif
+                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
                                         操作
                                         </th>
                         </tr>
@@ -49,6 +87,17 @@
                                 <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
                                 {{  $order->created_at }}
                                 </td>
+                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+                                {{  $order->statusWord }}
+                                </td>
+                                @if($canApprove && $order->status == 0)
+                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+                                <button class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.show', ['id' => $order->id])" onclick="decideOrderStatus(true, '{!! $order->id !!}')">通過</button>
+                                <button class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.show', ['id' => $order->id])" onclick="decideOrderStatus(false, '{!! $order->id !!}')">否決</button>
+                                @else
+                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+                                </td>
+                                @endif
                                 <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
                                 <x-nav-link class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.show', ['id' => $order->id])">詳情</x-nav-link>
                                 </td>

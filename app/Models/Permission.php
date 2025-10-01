@@ -5,12 +5,10 @@ namespace App\Models;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Product extends Authenticatable
+class Permission extends Authenticatable
 {
     use Notifiable;
-    use HasFactory;
 
     /**
      * The attributes that are mass assignable.
@@ -18,7 +16,7 @@ class Product extends Authenticatable
      * @var array
      */
     protected $fillable = [
-        'name', 'price', 'amount', 'description'
+        'name'
     ];
 
     /**
@@ -36,4 +34,8 @@ class Product extends Authenticatable
      */
     protected $casts = [
     ];
+    public function role()
+    {
+        return $this->belongsToMany(Role::class, 'permission_role', 'permission_id', 'role_id');
+    }
 }

@@ -5,12 +5,11 @@ namespace App\Models;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Product extends Authenticatable
+class Role extends Authenticatable
 {
     use Notifiable;
-    use HasFactory;
+    public $timestamps = false; // 關閉時間戳記
 
     /**
      * The attributes that are mass assignable.
@@ -18,7 +17,7 @@ class Product extends Authenticatable
      * @var array
      */
     protected $fillable = [
-        'name', 'price', 'amount', 'description'
+        'name'
     ];
 
     /**
@@ -36,4 +35,13 @@ class Product extends Authenticatable
      */
     protected $casts = [
     ];
+
+    public function users()
+    {
+        return $this->belongsToMany(User::class, 'role_user', 'role_id', 'user_id');
+    }
+    public function permissions()
+    {
+        return $this->belongsToMany(Permission::class, 'permission_role', 'role_id', 'permission_id');
+    }
 }

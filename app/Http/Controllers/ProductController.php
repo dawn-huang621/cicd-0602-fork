@@ -29,11 +29,13 @@ class ProductController extends Controller
                 [
                     'name' => 'required|string|unique:products,name|max:30',
                     'price' => 'required|string',
+                    'amount' => 'required|int',
                     'description' => 'required|string'
                 ], 
                 [
                     'name' => 'product.name',
                     'price' => 'product.price',
+                    'amount' => 'product.amount',
                     'description' => 'product.description'
                 ]
             );
@@ -42,10 +44,11 @@ class ProductController extends Controller
                         ->withErrors($validator)
                         ->withInput();
             }
-
+// dd($request->amount);
             $result = Product::create([
                 'name' => $request->name,
-                'price' => $request->price,
+                'price' => (int)$request->price,
+                'amount' => (int)$request->amount,
                 'description' => $request->description,
             ]);
             if($result){

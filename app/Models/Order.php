@@ -39,4 +39,9 @@ class Order extends Authenticatable
     {
         return $this->belongsTo(Customer::class);
     }
+
+    public function orderItems()
+    {
+        return $this->hasMany(OrderItem::class, 'order_id', 'id');
+    }
 }

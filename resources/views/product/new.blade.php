@@ -26,11 +26,11 @@
             </div>
 
             <!-- 庫存數量 -->
-            <!-- <div>
-                <label for="stock" class="block text-sm font-medium text-gray-700">庫存數量</label>
-                <input type="number" name="stock" id="stock" required
+            <div>
+                <label for="amount" class="block text-sm font-medium text-gray-700">庫存數量</label>
+                <input type="number" name="amount" id="amount" required
                     class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-            </div> -->
+            </div>
 
             <!-- 類別 -->
             <!-- <div>

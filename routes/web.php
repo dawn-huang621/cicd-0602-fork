@@ -24,7 +24,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/index', [OrderController::class, 'list'])->name('order.list');
         Route::get('/create', [OrderController::class, 'create'])->name('order.new');
         Route::post('/store', [OrderController::class, 'store'])->name('order.store');
-        Route::get('/show', [OrderController::class, 'show'])->name('order.show');
+        Route::get('/show/{id}', [OrderController::class, 'show'])->name('order.show');
+        Route::post('/orders/{id}/review', [OrderController::class, 'appoveOrder'])->name('orders.review');
  
     });
 
