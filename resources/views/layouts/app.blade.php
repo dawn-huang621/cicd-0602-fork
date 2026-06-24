@@ -14,7 +14,18 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         <script src="{{ asset('js/jquery-3.7.1.js') }}"></script>
+
+        <link rel="stylesheet" href="{{ asset('css/datatables.min.css') }}">
+        <script src="{{ asset('js/datatables.min.js') }}"></script>
+        
+        <!-- Chart.js v2.4.0 -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+        
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script>
+            const csrfToken = document.head.querySelector('meta[name="csrf-token"]').content;
+        </script>
     </head>
     <body class="font-sans antialiased">
 
