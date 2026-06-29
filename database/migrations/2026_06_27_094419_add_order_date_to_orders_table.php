@@ -12,9 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            $table->Integer('status')
-                ->default(0)
-                ->comment('訂單狀態: 0=待處理, 1=已付款, 2=審核失敗, 3=已出貨, 4=已取消');
+            $table->date('order_date');
+            $table->date('delivery_date')->nullable();
+            $table->date('due_date')->nullable();
+            
         });
     }
 
@@ -24,7 +25,11 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            $table->dropColumn('status');
+            $table->dropColumn([
+                'order_date',
+                'delivery_date',
+                'due_date'
+            ]);
         });
     }
 };
