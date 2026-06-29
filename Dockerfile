@@ -1,23 +1,17 @@
-FROM richarvey/nginx-php-fpm:3.1.6
+FROM php:8.2-fpm
 
-COPY . .
+# 安裝必要套件
+RUN apt-get update && apt-get install -y \
+    libzip-dev zip unzip curl git libpq-dev nodejs npm \
+    && docker-php-ext-install pdo pdo_pgsql zip
 
-# 安裝 Node.js + npm（for Alpine）
-RUN apk add --no-cache nodejs npm
+# 設定工作目錄
+WORKDIR /var/www/html
 
-# Image config
-ENV SKIP_COMPOSER 1
-ENV WEBROOT /var/www/html/public
-ENV PHP_ERRORS_STDERR 1
-ENV RUN_SCRIPTS 1
-ENV REAL_IP_HEADER 1
+# 安裝 Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Laravel config
-ENV APP_ENV production
-ENV APP_DEBUG false
-ENV LOG_CHANNEL stderr
+# 安裝 Laravel 套件（開發環境可保留 --dev）
+RUN composer global require laravel/installer
 
-# Allow composer to run as root
-ENV COMPOSER_ALLOW_SUPERUSER 1
-
-CMD ["/start.sh"]
+CMD ["php-fpm"]
