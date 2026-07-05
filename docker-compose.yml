@@ -12,6 +12,16 @@ services:
       - db
     networks:
       - laravel
+      
+  node:
+    image: node:20-alpine
+    container_name: laravel-node
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    networks:
+      - laravel
+    tty: true
 
   nginx:
     image: nginx:stable-alpine
