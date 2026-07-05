@@ -1,0 +1,2194 @@
+diff --git a/app/Http/Controllers/OrderController.php b/app/Http/Controllers/OrderController.php
+index 635f914..f2bff3e 100644
+--- a/app/Http/Controllers/OrderController.php
++++ b/app/Http/Controllers/OrderController.php
+@@ -11,6 +11,8 @@ use App\Models\Customer;
+ use App\Models\StockMovement;
+ use Illuminate\Support\Facades\Validator;
+ use App\Http\Requests\StoreOrderRequest;
++use App\Services\OrderService;
++use Illuminate\Validation\ValidationException;
+ use Illuminate\Support\Facades\Auth;
+ use Log;
+ 
+@@ -19,25 +21,59 @@ class OrderController extends Controller
+     function list()
+     {
+         $result = Order::All();
+-        foreach($result as $order){
++        ### 待審核
++        // 可以：
++        // - 修改訂單
++        // - 刪除訂單
++
++        // ### 已核准
++        // 可以：
++        // - 出貨
++        // 不可：
++        // - 修改商品
++
++        // ### 已出貨
++        // 不可修改。
++        // foreach($result as $order){
++        //     $order->order_number = 'O'. $order->order_number;
++        //     $statusList = [0 => '草稿', 1 => '待審核', 2=> '已核准', 3=> '審核不通過', 4=> '已出貨', 5 => '已完成'];
++        //     $order->statusWord = $statusList[$order->status];
++        // }
++        // // dd('ggg');
++        // // 如果是主管要能看到省批的按鈕
++        // $roles = Auth::user()->roles;
++        // $permissions = $roles->flatMap(function ($role) {
++        //     return $role->permissions;
++        // })->unique('id');
++        // // dd($roles, $permissions);
++
++        // $canApprove = false;
++        // if($permissions->contains('name', 'approve_order')){
++        //     $canApprove = true;
++        // }
++
++        // return view('order.index', ['orders' => $result, 'canApprove' => $canApprove]);
++        
++        $orders = Order::with('orderItems.product')->get();
++        $totalMoney = 0;
++        foreach($orders as $order){
+             $order->order_number = 'O'. $order->order_number;
+-            $statusList = [0=> '未審核', 1=> '審核通過', 2=> '審核不通過'];
++            $order->customer_name = $order->customer->name; // 取得關聯的客戶名稱
++            $statusList = [0 => '草稿', 1 => '待審核', 2=> '已核准', 3=> '審核不通過', 4=> '已出貨', 5 => '已完成'];
++            $statusStyle = [1=> 'status-pending', 2=> 'status-approved', 4=> 'status-shipped', 5=> 'status-completed', 3 => 'status-rejected',  '0' => 'status-draft'];
+             $order->statusWord = $statusList[$order->status];
++            // dd($order, $statusStyle);
++            $order->statusStyle = $statusStyle[$order->status];
++            foreach($order->orderItems as $item){
++                $totalMoney += (int)$item->amount *(int)$item->price;
++                $order->price += (int)$item->amount *(int)$item->price;
++            }
++            // dd($order, $totalMoney);
+         }
+-        // dd('ggg');
+-        // 如果是主管要能看到省批的按鈕
+-        $roles = Auth::user()->roles;
+-        $permissions = $roles->flatMap(function ($role) {
+-            return $role->permissions;
+-        })->unique('id');
+-        // dd($roles, $permissions);
+-
+-        $canApprove = false;
+-        if($permissions->contains('name', 'approve_order')){
+-            $canApprove = true;
+-        }
+-
+-        return view('order.index', ['orders' => $result, 'canApprove' => $canApprove]);
++        return view('order.index', [
++                                        'orders' => $orders,
++                                        'totalMoney' => $totalMoney
++                                    ]);
+     }
+ 
+     function create()
+@@ -57,74 +93,19 @@ class OrderController extends Controller
+                                 ]);
+     }
+     
+-    function store(StoreOrderRequest $request)
++    function store(StoreOrderRequest $request, OrderService $orderService)
+     {
+-        try{
+-            // 驗證
+-            $validated = $request->validated();
+-            $lastOrder = Order::latest()->first();
+-
+-            $orderNumber = 134500001;
+-            if(isset($lastOrder)){
+-                $orderNumber = $lastOrder->order_number + 1;
+-                // $orderNumber = 'O' . $number;
+-            }
+-            
+-            // 建立order and order_item
+-            $query = DB::transaction(function () use ($request, $orderNumber) {
+-                // dd($request,$request->products , $orderNumber);
+-                // 建立訂單
+-                $order = Order::create([
+-                    'order_number' => $orderNumber,
+-                    'customer_id' => $request->customer,
+-                ]);
+-                if (!$order) throw new \Exception('建立訂單失敗');
+-                
+-                // 建立訂單品項
+-                $orderItemsData = [];
+-                foreach($request->products as $products){
+-                    $orderItemsData[] = [
+-                        'product_id' => $products['product_id'],
+-                        'order_id' => $order->id,
+-                        'amount' => $products['quantities'],
+-                        'created_at' => now(),  // insert() 不會自動補 timestamps
+-                        'updated_at' => now(),
+-                    ];
+-                }
+-                if(count($orderItemsData) == 0) throw new \Exception('品項不得為0');
+-                if (!OrderItem::insert($orderItemsData)) {
+-                    throw new \Exception('建立訂單品項失敗');
+-                }
+-
+-                return true;
+-            }); 
+-
+-            if($query){
+-                // 存入
+-                return redirect('order/index');
+-            } else {
+-                return redirect('order/create')
+-                        ->withErrors(['msg' => '建立訂單失敗'])
+-                        ->withInput();
+-            }
++        $orderService->create($request->validated());
+ 
+-        } catch (ValidationException $exception) {
+-        return redirect('order/create')
+-            ->withErrors($exception->validator)
+-            ->withInput();
+-        } 
+-        // catch (\Exception $e) {
+-        //     return redirect('order/create')
+-        //         ->withErrors(['msg' => $e->getMessage()])
+-        //         ->withInput();
+-        // }
++        return redirect()->route('order.list')
++            ->with('status', 'Order created successfully.');
+     }
+ 
+     function show(Request $request){
+         // dd($id);
+-        dd($request->input('orderId'));
++        $orderId = $request->input('orderId');
+ 
+-        
++        // 品名，訂單數量，現有庫存
+         $order = Order::with('customer')->findOrFail($id);
+         $customer = $order->customer;
+         $orderItems = OrderItem::with('product')->where('order_id', $id)->get();
+@@ -135,100 +116,87 @@ class OrderController extends Controller
+                                 ]);
+     }
+ 
+-    function appoveOrder(Request $request, $id){
+-        Log::info($request->input('approved'));
+-        $approved = $request->input('approved') ? 1 : 2;
+-        $orderId = (int)$request->input('orderId');
+-        $order = Order::find($orderId);
++    function showDetail(Request $request){
++        // try{
++            $orderId = $request->input('orderId');
++            $order = Order::with('orderItems.product')->findOrFail($orderId);
++            return response()->json([
++                'status' => 'success',
++                'data' => $order
++            ]);
+ 
+-        if (!$order) {
+-            return response()->json(
+-                [
+-                    'status' => 'error',
+-                    'message' => 'Order not found'
+-                ], 404);
+-        }
++        // } catch (\Exception $e) {
++        //     return response()->json([
++        //         'status' => 'error',
++        //         'message' => $e->getMessage()
++        //     ], 500);
++        // }
+         
+-        if($approved !== 1){
+-            $order->status = $approved; // 1: approved, 2: rejected
+-            $order->save();
+-            return response()->json(
+-                [
+-                    'status' => 'success',
+-                    'message' => 'Order rejected'
+-                ]);
++    }
++
++    function approveOrder(Request $request, int $id, OrderService $orderService)
++    {
++        try {
++            $orderService->approve($id, $request->user()?->id);
++
++            return response()->json([
++                'status' => 'success',
++                'message' => 'Order approved successfully',
++            ]);
++        } catch (ValidationException $exception) {
++            return response()->json([
++                'status' => 'error',
++                'message' => collect($exception->errors())->flatten()->first(),
++                'errors' => $exception->errors(),
++            ], 422);
+         }
++    }
++
++    function dispatchOrder(Request $request){
++        $orderId = $request->input('orderId');
+         
+-        $outOfStockProducts = [];
+-        $stockParams = [];
+-        $user = Auth::user();
+-Log::info(1);
+-        DB::beginTransaction();
+-Log::info(1.4);
+-        // try {
+-Log::info(1.41);
+-            $orderItems = OrderItem::where('order_id', $orderId)->get();
+-Log::info(json_encode($orderItems));
+-            foreach($orderItems as $key => $value){
+-Log::info(1.5);
+-                $product = Product::where('id', $value->product_id)->first();
+-Log::info(json_encode($product));
+-
+-                // 檢查庫存不足
+-                if($product->amount < $value->amount){
+-                    array_push($outOfStockProducts, $product->name);
+-                    continue;
+-                }
+-                // 扣庫存
+-                $product->decrement('amount', $value->amount);
+-
+-                // 新增庫存異動紀錄
+-                $stockParams[] = [
+-                    'product_id' => $product->id,
+-                    'order_id'   => $order->id,
+-                    'user_id'    => $user->id,
+-                    'type'       => 3, // 出庫
+-                    'balance'    => $product->amount,
+-                    'quantity'   => $value->amount,
+-                    'created_at' => now(),
+-                    'updated_at' => now(),
+-                ];
+-                
+-Log::info(2);
+-            }
++        $order = Order::find($orderId);
++        if(!$order){
++            return response()->json([
++                'status' => 'error',
++                'message' => 'Order not found'
++            ], 404);
++        }
+ 
+-            // 有缺貨，rollback
+-            if (!empty($outOfStockProducts)) {
+-                DB::rollBack();
+-                return response()->json([
+-                    'status' => 'error',
+-                    'message' => '產品 ' . implode(',', $outOfStockProducts) . ' 庫存不足'
+-                ]);
+-            }
++        $order->status = 3; // 已出貨
++        $order->save();
+ 
+-Log::info(3);
++        return response()->json([
++            'status' => 'success',
++            'message' => 'Order dispatched successfully'
++        ]);
++    }
+ 
+-            // 批量新增 stock_movements
+-            StockMovement::insert($stockParams);
++    function fetchByDateRange(Request $request){
++        try{
+ 
+-            // 訂單通過
+-            $order->status = $approved; // approved
+-            $order->save();
++            $startDate = $request->input('startDate');
++            $endDate = $request->input('endDate');
++            $orders = Order::with('customer')
++                ->whereBetween('created_at', [$startDate, $endDate])
++                ->get();
+ 
+-Log::info(4);
+-            DB::commit();
+-            return response()->json(
+-                [
+-                    'status' => 'success',
+-                    'message' => 'Order approved successfully'
+-                ]);
++            
++            foreach($orders as $value){
++                $value->order_number = 'O' . $value->order_number;
++            }
++
++            return response()->json([
++                'status' => 'success',
++                'message' => $orders
++            ]);
++        } catch (\Exception $e) {
++            Log::info($e->getMessage());
++            return response()->json([
++                'status' => 'error',
++                'message' => 'Order dispatched successfully'
++            ]);
++        }
+ 
+-        // } catch (\Exception $e) {
+-        //     DB::rollBack();
+-        //     return response()->json([
+-        //         'status' => 'error',
+-        //         'message' => '審核失敗: ' . $e->getMessage()
+-        //     ], 500);
+-        // }
+     }
+ }
+diff --git a/app/Http/Requests/StoreOrderRequest.php b/app/Http/Requests/StoreOrderRequest.php
+index 6f971dd..52067aa 100644
+--- a/app/Http/Requests/StoreOrderRequest.php
++++ b/app/Http/Requests/StoreOrderRequest.php
+@@ -22,8 +22,11 @@ class StoreOrderRequest extends FormRequest
+     public function rules(): array
+     {
+         return [
+-        'products.*.product_id' => 'required|exists:products,id',
+-        'products.*.quantities' => 'required|integer|min:1',
++            'customer' => ['required', 'exists:customers,id'],
++            'date' => ['required', 'date'],
++            'products' => ['required', 'array', 'min:1'],
++            'products.*.product_id' => ['required', 'distinct', 'exists:products,id'],
++            'products.*.quantities' => ['required', 'integer', 'min:1'],
+         ];
+     }
+ 
+diff --git a/app/Models/Order.php b/app/Models/Order.php
+index f8f8d08..6187379 100644
+--- a/app/Models/Order.php
++++ b/app/Models/Order.php
+@@ -16,7 +16,7 @@ class Order extends Authenticatable
+      * @var array
+      */
+     protected $fillable = [
+-        'name', 'order_number', 'customer_id'
++        'name', 'order_number', 'customer_id', 'order_date', 'status'
+     ];
+ 
+     /**
+@@ -33,6 +33,7 @@ class Order extends Authenticatable
+      * @var array
+      */
+     protected $casts = [
++        'order_date' => 'date',
+     ];
+     
+     public function customer()
+diff --git a/app/Models/OrderItem.php b/app/Models/OrderItem.php
+index ea6e75e..973b4dc 100644
+--- a/app/Models/OrderItem.php
++++ b/app/Models/OrderItem.php
+@@ -16,7 +16,7 @@ class OrderItem extends Authenticatable
+      * @var array
+      */
+     protected $fillable = [
+-        'amount', 'product_id',
++        'amount', 'price', 'product_id', 'order_id',
+     ];
+ 
+     /**
+diff --git a/app/Models/Product.php b/app/Models/Product.php
+index b223550..a4150b1 100644
+--- a/app/Models/Product.php
++++ b/app/Models/Product.php
+@@ -36,4 +36,14 @@ class Product extends Authenticatable
+      */
+     protected $casts = [
+     ];
++
++    public function orderItems()
++    {
++        return $this->hasMany(OrderItem::class);
++    }
++
++    public function stock()
++    {
++        return $this->hasOne(Stock::class);
++    }
+ }
+diff --git a/resources/views/order/index.blade.php b/resources/views/order/index.blade.php
+index 816ff46..938306b 100644
+--- a/resources/views/order/index.blade.php
++++ b/resources/views/order/index.blade.php
+@@ -1,5 +1,379 @@
+ <head>
++    
++    <style>
++        * {
++        box-sizing: border-box;
++        }
++
++        body {
++        margin: 0;
++        font-family: Arial, "Microsoft JhengHei", sans-serif;
++        background: #f3f5f8;
++        color: #1f2937;
++        }
++
++        .page {
++        max-width: 1200px;
++        margin: 40px auto;
++        padding: 0 24px;
++        }
++
++        .page-title {
++        font-size: 28px;
++        font-weight: 700;
++        margin-bottom: 8px;
++        }
++
++        .page-desc {
++        color: #6b7280;
++        margin-bottom: 24px;
++        }
++
++        .card {
++        background: #fff;
++        border: 1px solid #d9dee7;
++        border-radius: 10px;
++        box-shadow: 0 4px 12px rgba(0,0,0,.04);
++        overflow: hidden;
++        }
++
++        .card-header {
++        display: flex;
++        justify-content: space-between;
++        align-items: center;
++        padding: 16px 24px;
++        border-bottom: 1px solid #e5e7eb;
++        background: #f9fbff;
++        }
++
++        .breadcrumb {
++        font-weight: 600;
++        color: #374151;
++        }
++
++        .btn-primary {
++        background: #2563eb;
++        color: #fff;
++        border: none;
++        border-radius: 6px;
++        padding: 10px 16px;
++        font-weight: 600;
++        cursor: pointer;
++        }
++
++        .btn-secondary {
++        background: #e5e7eb;
++        color: #374151;
++        border: none;
++        border-radius: 6px;
++        padding: 10px 16px;
++        cursor: pointer;
++        }
++
++        .filters {
++        display: grid;
++        grid-template-columns: 1.3fr 1fr 1fr 1.8fr auto auto;
++        gap: 16px;
++        padding: 24px;
++        border-bottom: 1px solid #e5e7eb;
++        align-items: end;
++        }
++
++        .form-group label {
++        display: block;
++        font-size: 14px;
++        color: #6b7280;
++        margin-bottom: 8px;
++        }
++
++        input,
++        select {
++        width: 100%;
++        height: 38px;
++        border: 1px solid #d1d5db;
++        border-radius: 6px;
++        padding: 0 12px;
++        font-size: 14px;
++        background: #fff;
++        }
++
++        .date-range {
++        display: flex;
++        align-items: center;
++        gap: 8px;
++        }
++
++        .table-area {
++        padding: 24px;
++        }
++
++        .table-top {
++        display: flex;
++        justify-content: space-between;
++        margin-bottom: 16px;
++        align-items: center;
++        }
++
++        .entries select {
++        width: 70px;
++        margin-right: 6px;
++        }
++
++        .search {
++        display: flex;
++        align-items: center;
++        gap: 8px;
++        }
++
++        .search input {
++        width: 220px;
++        }
++
++        table {
++        width: 100%;
++        border-collapse: collapse;
++        background: #fff;
++        }
++
++        th {
++        text-align: left;
++        padding: 12px 10px;
++        border-bottom: 1px solid #9ca3af;
++        font-size: 14px;
++        color: #374151;
++        }
++
++        td {
++        padding: 12px 10px;
++        border-bottom: 1px solid #e5e7eb;
++        font-size: 15px;
++        }
++
++        tr:hover {
++        background: #f9fafb;
++        }
++
++        .amount {
++        text-align: right;
++        }
++
++        .status {
++        display: inline-block;
++        padding: 4px 10px;
++        border-radius: 6px;
++        font-size: 13px;
++        font-weight: 600;
++        }
++
++        .status-pending {
++        color: #dc2626;
++        background: #fee2e2;
++        border: 1px solid #fecaca;
++        }
++
++        .status-approved {
++        color: #15803d;
++        background: #dcfce7;
++        border: 1px solid #bbf7d0;
++        }
++
++        .status-shipped {
++        color: #2563eb;
++        background: #dbeafe;
++        border: 1px solid #bfdbfe;
++        }
++
++        .btn-detail {
++        background: #6366f1;
++        color: #fff;
++        border: none;
++        border-radius: 6px;
++        padding: 7px 12px;
++        cursor: pointer;
++        font-size: 14px;
++        }
++
++        .summary-row td {
++        border-bottom: 1px solid #9ca3af;
++        font-weight: 700;
++        }
++
++        .total-label {
++        text-align: right;
++        }
++
++        .total-money {
++        font-weight: 700;
++        text-align: right;
++        }
++
++        .table-footer {
++        display: flex;
++        justify-content: space-between;
++        align-items: center;
++        margin-top: 18px;
++        color: #374151;
++        }
++
++        .pagination {
++        display: flex;
++        gap: 8px;
++        align-items: center;
++        }
++
++        .page-btn {
++        border: 1px solid #d1d5db;
++        background: #fff;
++        padding: 8px 12px;
++        border-radius: 4px;
++        cursor: pointer;
++        }
++
++        .page-btn.active {
++        background: #f3f4f6;
++        border-color: #9ca3af;
++        font-weight: 700;
++        }
++
++        .status-help {
++        margin-top: 28px;
++        padding: 20px 24px;
++        background: #f8fbff;
++        border: 1px solid #bfdbfe;
++        border-radius: 10px;
++        }
++
++        .status-help h3 {
++        margin-top: 0;
++        margin-bottom: 16px;
++        color: #1d4ed8;
++        }
++
++        .status-grid {
++        display: grid;
++        grid-template-columns: repeat(4, 1fr);
++        gap: 18px;
++        }
++
++        .status-box {
++        font-size: 14px;
++        line-height: 1.7;
++        color: #4b5563;
++        }
++
++        .status-box strong {
++        display: block;
++        margin-bottom: 6px;
++        color: #111827;
++        }
++
++        @media (max-width: 900px) {
++        .filters {
++            grid-template-columns: 1fr 1fr;
++        }
++
++        .status-grid {
++            grid-template-columns: 1fr 1fr;
++        }
++
++        .table-area {
++            overflow-x: auto;
++        }
++
++        table {
++            min-width: 900px;
++        }
++        }
++
++        @media (max-width: 600px) {
++        .filters {
++            grid-template-columns: 1fr;
++        }
++
++        .table-top,
++        .table-footer,
++        .card-header {
++            flex-direction: column;
++            align-items: flex-start;
++            gap: 12px;
++        }
++
++        .status-grid {
++            grid-template-columns: 1fr;
++        }
++        }
++    </style>
+     <script>
++        
++        // 取得訂單細項
++        function getOrderContent(orderId){
++            $.ajax({
++                headers: {
++                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
++                },
++                url: "{{ route('order.detail', ['id' => ':id']) }}".replace(':id', orderId),
++                type: 'POST',
++                dataType: 'json',
++                data: {
++                    orderId: Number(orderId)
++                },
++                success: function(response) {
++                    console.log(response);
++                    console.log(response.data);
++
++                    // alert('訂單已通過');
++                    if(response.status == 'success'){
++
++                        let tableBody = '';
++                        for(const item of response.data.order_items){        
++                            console.log(item);
++                            $count = item.amount * item.price;
++                            tableBody +=`
++                            <tr>
++                                <td>${item.product.name}</td>
++                                <td>${item.amount}</td>
++                                <td>${item.product.amount}</td>
++                                <td>${item.price}</td>
++                                <td>${$count}<td>
++                            </tr>`;
++                        }
++
++                        Swal.fire({
++                            title: "訂單細項",
++                            html: `
++                                <div style="max-height: 400px; overflow-y: auto;">
++                                    <table style="
++                                        width: 100%;
++                                        border-collapse: collapse;
++                                        text-align: center;
++                                        font-size: 14px;
++                                    ">
++                                        <thead style="background-color: #f8f9fa;">
++                                            <tr>
++                                                <th style="border: 1px solid #ddd; padding: 8px;">產品名稱</th>
++                                                <th style="border: 1px solid #ddd; padding: 8px;">訂單數量</th>
++                                                <th style="border: 1px solid #ddd; padding: 8px;">現有庫存</th>
++                                                <th style="border: 1px solid #ddd; padding: 8px;">單價</th>
++                                                <th style="border: 1px solid #ddd; padding: 8px;">小計</th>
++                                            </tr>
++                                        </thead>
++                                        <tbody>
++                                            ${tableBody}
++                                        </tbody>
++                                    </table>
++                                </div>
++                            `,
++                            cancelButtonAriaLabel: "Thumbs down"
++                        });
++                    }
++                },
++                error: function(xhr, status, error) {
++                    console.log(xhr, status, error);
++                    alert('訂單出貨失敗');
++                }
++            });
++        }
++        
+         function decideOrderStatus(approved, id){
+             $.ajax({
+                 headers: {
+@@ -25,6 +399,94 @@
+                 }
+             });
+         }
++
++        function dispatch(orderId){
++            $.ajax({
++                headers: {
++                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
++                },
++                url: "{{ route('orders.dispatch', ['id' => ':id']) }}".replace(':id', orderId),
++                type: 'POST',
++                dataType: 'json',
++                data: { 
++                    orderId: Number(orderId)
++                },
++                success: function(response) {
++                    console.log(response);
++                    // alert('訂單已通過');
++                    if(response.status == 'success'){
++                        window.location.reload();
++                    }
++                },
++                error: function(xhr, status, error) {
++                    console.log(xhr, status, error);
++                    alert('訂單出貨失敗');
++                }
++            })
++        }
++
++        // 區間訂單撈取
++        function fetchOrdersByDateRange() {
++          const startDate = document.querySelector('.filters input[type="date"]:first-child').value;
++          const endDate = document.querySelector('.filters input[type="date"]:last-child').value;
++        //   let orderTable = $('#orderTable').DataTable();
++
++		  if (!startDate || !endDate) { alert('請選擇開始日期與結束日期'); return; };
++		  
++            $.ajax({
++                headers: {
++                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
++                },
++                url: "{{ route('orders.fetchByDateRange') }}",
++                type: 'POST',
++                dataType: 'json',
++                data: {
++                    startDate: startDate,
++                    endDate: endDate
++                },
++                success: function(response) {
++                    console.log(response);
++					let orders = response.message || [];
++					console.log(response, orders, typeof orders);
++					console.log(orders);
++					console.log(orders[0]);
++					console.log(Array.isArray(orders));
++					// 渲染畫面
++					if ($.fn.DataTable.isDataTable('#orderTable')) {
++						$('#orderTable').DataTable().clear().destroy();
++					}
++
++					$('#orderTable tbody').empty();
++					orderTable = $('#orderTable').DataTable({ 
++						data: orders, 
++						destroy: true,
++						columns: [
++							{ data: 'id' },
++							{ data: 'customer.name' },
++							{ data: 'status' },
++							{ data: 'amount',
++								defaultContent: '-'
++							},
++							{ data: 'orderDeadLine',
++								defaultContent: '-'
++							},
++							{ data: 'created_at' },
++							{
++								data: 'id',
++								render: function(id) {
++									return `<button class="btn-detail" onclick="getOrderContent('${id}')">訂單明細</button>`;
++								}
++							}
++						]
++					});
++					
++                },
++                error: function(xhr, status, error) {
++                    console.log(xhr, status, error);
++                    alert('訂單撈取失敗');
++                }
++            });
++        }
+     </script>
+ </head>
+ 
+@@ -35,92 +497,107 @@
+         </h2>
+     </x-slot>
+ 
+-    <div class="py-12">
+-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+-
+-            <section class="py-1 bg-blueGray-50">
+-                <div class="w-full xl:w-8/12 mb-12 xl:mb-0 px-4 mx-auto mt-24">
+-                <div class="relative flex flex-col min-w-0 break-words bg-white w-full mb-6 shadow-lg rounded ">
+-                    <div class="rounded-t mb-0 px-4 py-3 border-0">
+-                    <div class="flex flex-wrap items-center">
+-                        <div class="relative w-full px-4 max-w-full flex-grow flex-1">
+-                        <h3 class="font-semibold text-base text-blueGray-700">Page Visits</h3>
+-                        </div>
+-                        <!-- Navigation Links -->
+-                        <div class="relative w-full px-4 max-w-full flex-grow flex-1 text-right">
+-                        <x-nav-link class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.new')">新增訂單</x-nav-link>
+-                        
+-                        </div>
+-                    </div>
+-                    </div>
+-
+-                    <div class="block w-full overflow-x-auto">
+-                    <table class="items-center bg-transparent w-full border-collapse ">
+-                        <thead>
+-                        <tr>
+-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+-                                        訂單ID
+-                                        </th>
+-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+-                                        建立時間
+-                                        </th>
+-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+-                                        訂單狀態
+-                                        </th>
+-                                        @if($canApprove)
+-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+-                                        審核
+-                                        </th>
+-                                        @endif
+-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+-                                        操作
+-                                        </th>
+-                        </tr>
+-                        </thead>
+-
+-                        <tbody>
+-                            @foreach($orders as $order)
+-                            <tr>
+-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 ">
+-                                {{  $order->order_number}}
+-                                </td>
+-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+-                                {{  $order->created_at }}
+-                                </td>
+-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+-                                {{  $order->statusWord }}
+-                                </td>
+-                                @if($canApprove && $order->status == 0)
+-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+-                                <button class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.show', ['id' => $order->id])" onclick="decideOrderStatus(true, '{!! $order->id !!}')">通過</button>
+-                                <button class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.show', ['id' => $order->id])" onclick="decideOrderStatus(false, '{!! $order->id !!}')">否決</button>
+-                                @else
+-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+-                                </td>
+-                                @endif
+-                                <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+-                                <x-nav-link class="bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 " :href="route('order.show', ['id' => $order->id])">詳情</x-nav-link>
+-                                </td>
+-                            </tr>
+-                            @endforeach
+-                        </tbody>
+-
+-                    </table>
+-                    </div>
+-                </div>
+-                </div>
+-                <footer class="relative pt-8 pb-6 mt-16">
+-                <div class="container mx-auto px-4">
+-                    <div class="flex flex-wrap items-center md:justify-between justify-center">
+-                    <!-- <div class="w-full md:w-6/12 px-4 mx-auto text-center">
+-                        <div class="text-sm text-blueGray-500 font-semibold py-1">
+-                        Made with <a href="https://www.creative-tim.com/product/notus-js" class="text-blueGray-500 hover:text-gray-800" target="_blank">Notus JS</a> by <a href="https://www.creative-tim.com" class="text-blueGray-500 hover:text-blueGray-800" target="_blank"> Creative Tim</a>.
+-                        </div>
+-                    </div> -->
+-                    </div>
+-                </div>
+-                </footer>
+-            </section>
++    <section class="card">
++      <div class="card-header">
++        <div class="breadcrumb">🏠 訂單管理 / 訂單列表</div>
++        <button class="btn-primary">＋ 新增訂單</button>
++      </div>
++
++      <div class="filters">
++        <div class="form-group">
++          <label>訂單日期</label>
++          <div class="date-range">
++            <input type="date" value="2025-09-01">
++            <span>－</span>
++            <input type="date" value="2025-09-30">
++          </div>
++        </div>
++
++        <div class="form-group">
++          <label>狀態</label>
++          <select>
++            <option>全部</option>
++            <option>未審核</option>
++            <option>審核通過</option>
++            <option>已出貨</option>
++            <option>已完成</option>
++            <option>已取消</option>
++          </select>
++        </div>
++
++        <div class="form-group">
++          <label>客戶</label>
++          <select>
++            <option>全部</option>
++            <option>陳依</option>
++          </select>
++        </div>
++
++        <div class="form-group">
++          <label>搜尋</label>
++          <input type="text" placeholder="訂單編號 / 客戶名稱">
++        </div>
++
++        <button class="btn-primary" onclick="fetchOrdersByDateRange()">搜尋</button>
++        <button class="btn-secondary">重設</button>
++      </div>
++
++      <div class="table-area">
++
++        <table id="orderTable">
++          <thead>
++            <tr>
++              <th>ID</th>
++              <th>客戶名稱</th>
++              <th>狀態</th>
++              <th class="amount">金額</th>
++              <th>訂單日期</th>
++              <th>建立時間</th>
++              <th>操作</th>
++            </tr>
++          </thead>
++
++          <tbody>
++          </tbody>
++        </table>
++
++        <!-- <div class="table-footer">
++          <div>Showing 1 to 5 of 5 entries</div>
++
++          <div class="pagination">
++            <button class="page-btn">«</button>
++            <button class="page-btn">‹</button>
++            <button class="page-btn active">1</button>
++            <button class="page-btn">›</button>
++            <button class="page-btn">»</button>
++          </div>
++        </div> -->
++      </div>
++    </section>
++
++    <section class="status-help">
++      <h3>訂單狀態說明</h3>
++
++      <div class="status-grid">
++        <div class="status-box">
++          <strong><span class="status status-pending">未審核</span></strong>
++          訂單剛建立，尚未送出審核，可編輯與刪除。
++        </div>
++
++        <div class="status-box">
++          <strong><span class="status status-approved">審核通過</span></strong>
++          主管已核准，等待出貨，僅能查看明細。
++        </div>
++
++        <div class="status-box">
++          <strong><span class="status status-shipped">已出貨</span></strong>
++          訂單已出貨，庫存已扣除，僅能查看明細。
++        </div>
++
++        <div class="status-box">
++          <strong><span class="status">已完成</span></strong>
++          訂單流程已完成，可查看明細與列印。
+         </div>
+-    </div>
++      </div>
++    </section>
+ </x-app-layout>
+diff --git a/resources/views/product/index.blade.php b/resources/views/product/index.blade.php
+index f6b506e..67d6555 100644
+--- a/resources/views/product/index.blade.php
++++ b/resources/views/product/index.blade.php
+@@ -34,9 +34,6 @@
+                         <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+                                         Price
+                                         </th>
+-                        <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+-                                        Amount
+-                                        </th>
+                         <th class="px-6 bg-blueGray-50 text-blueGray-500 align-middle border border-solid border-blueGray-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+                                         created_at
+                                         </th>
+@@ -52,9 +49,6 @@
+                                 <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 ">
+                                 {{  $product->price}}
+                                 </td>
+-                                <td class="border-t-0 px-6 align-center border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+-                                {{  $product->amount }}
+-                                </td>
+                                 <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+                                 <i class="fas fa-arrow-up text-emerald-500 mr-4"></i>
+                                 {{  $product->created_at }}
+diff --git a/resources/views/reports/orders.blade.php b/resources/views/reports/orders.blade.php
+index bd4ee51..569c807 100644
+--- a/resources/views/reports/orders.blade.php
++++ b/resources/views/reports/orders.blade.php
+@@ -25,7 +25,7 @@
+                     console.log(response);
+                     console.log(response.data);
+ 
+-                    // alert('訂單已通過');
++                    // alert('訂單已通過');  
+                     if(response.status == 'success'){
+ 
+                         let tableBody = '';
+diff --git a/routes/web.php b/routes/web.php
+index 9fba350..730d9ca 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -27,10 +27,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
+         Route::get('/create', [OrderController::class, 'create'])->name('order.new');
+         Route::post('/store', [OrderController::class, 'store'])->name('order.store');
+         Route::get('/show/{id}', [OrderController::class, 'show'])->name('order.show');
+-        // Route::post('/show/{id}/detail', [OrderController::class, 'showDetail'])->name('order.detail');
+-        // Route::post('/orders/{id}/review', [OrderController::class, 'approveOrder'])->name('orders.review');
+-        // Route::post('/orders/{id}/dispatch', [OrderController::class, 'dispatchOrder'])->name('orders.dispatch');
+-        // Route::post('/orders/fetchByDateRange', [OrderController::class, 'fetchByDateRange'])->name('orders.fetchByDateRange');
++        Route::post('/show/{id}/detail', [OrderController::class, 'showDetail'])->name('order.detail');
++        Route::post('/orders/{id}/review', [OrderController::class, 'approveOrder'])->name('orders.review');
++        Route::post('/orders/{id}/dispatch', [OrderController::class, 'dispatchOrder'])->name('orders.dispatch');
++        Route::post('/orders/fetchByDateRange', [OrderController::class, 'fetchByDateRange'])->name('orders.fetchByDateRange');
++    });
++
++    Route::prefix('report')->group(function () {
++        Route::get('/orders', [ReportController::class, 'orders'])->name('reports.orders');
+     });
+ 
+     Route::prefix('stock-movement')->group(function () {
+diff --git a/yarn.lock b/yarn.lock
+deleted file mode 100644
+index d0a885f..0000000
+--- a/yarn.lock
++++ /dev/null
+@@ -1,1040 +0,0 @@
+-# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.
+-# yarn lockfile v1
+-
+-
+-"@alloc/quick-lru@^5.2.0":
+-  version "5.2.0"
+-  resolved "https://registry.npmjs.org/@alloc/quick-lru/-/quick-lru-5.2.0.tgz"
+-  integrity sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==
+-
+-"@esbuild/linux-x64@0.18.20":
+-  version "0.18.20"
+-  resolved "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.18.20.tgz"
+-  integrity sha512-UYqiqemphJcNsFEskc73jQ7B9jgwjWrSayxawS6UVFZGWrAAtkzjxSqnoclCXxWtfwLdzU+vTpcNYhpn43uP1w==
+-
+-"@isaacs/cliui@^8.0.2":
+-  version "8.0.2"
+-  resolved "https://registry.npmjs.org/@isaacs/cliui/-/cliui-8.0.2.tgz"
+-  integrity sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==
+-  dependencies:
+-    string-width "^5.1.2"
+-    string-width-cjs "npm:string-width@^4.2.0"
+-    strip-ansi "^7.0.1"
+-    strip-ansi-cjs "npm:strip-ansi@^6.0.1"
+-    wrap-ansi "^8.1.0"
+-    wrap-ansi-cjs "npm:wrap-ansi@^7.0.0"
+-
+-"@jridgewell/gen-mapping@^0.3.2":
+-  version "0.3.8"
+-  resolved "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.8.tgz"
+-  integrity sha512-imAbBGkb+ebQyxKgzv5Hu2nmROxoDOXHh80evxdoXNOrvAnVx7zimzc1Oo5h9RlfV4vPXaE2iM5pOFbvOCClWA==
+-  dependencies:
+-    "@jridgewell/set-array" "^1.2.1"
+-    "@jridgewell/sourcemap-codec" "^1.4.10"
+-    "@jridgewell/trace-mapping" "^0.3.24"
+-
+-"@jridgewell/resolve-uri@^3.1.0":
+-  version "3.1.2"
+-  resolved "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz"
+-  integrity sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==
+-
+-"@jridgewell/set-array@^1.2.1":
+-  version "1.2.1"
+-  resolved "https://registry.npmjs.org/@jridgewell/set-array/-/set-array-1.2.1.tgz"
+-  integrity sha512-R8gLRTZeyp03ymzP/6Lil/28tGeGEzhx1q2k703KGWRAI1VdvPIXdG70VJc2pAMw3NA6JKL5hhFu1sJX0Mnn/A==
+-
+-"@jridgewell/sourcemap-codec@^1.4.10", "@jridgewell/sourcemap-codec@^1.4.14":
+-  version "1.5.0"
+-  resolved "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.0.tgz"
+-  integrity sha512-gv3ZRaISU3fjPAgNsriBRqGWQL6quFx04YMPW/zD8XMLsU32mhCCbfbO6KZFLjvYpCZ8zyDEgqsgf+PwPaM7GQ==
+-
+-"@jridgewell/trace-mapping@^0.3.24":
+-  version "0.3.25"
+-  resolved "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.25.tgz"
+-  integrity sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ==
+-  dependencies:
+-    "@jridgewell/resolve-uri" "^3.1.0"
+-    "@jridgewell/sourcemap-codec" "^1.4.14"
+-
+-"@nodelib/fs.scandir@2.1.5":
+-  version "2.1.5"
+-  resolved "https://registry.npmjs.org/@nodelib/fs.scandir/-/fs.scandir-2.1.5.tgz"
+-  integrity sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==
+-  dependencies:
+-    "@nodelib/fs.stat" "2.0.5"
+-    run-parallel "^1.1.9"
+-
+-"@nodelib/fs.stat@^2.0.2", "@nodelib/fs.stat@2.0.5":
+-  version "2.0.5"
+-  resolved "https://registry.npmjs.org/@nodelib/fs.stat/-/fs.stat-2.0.5.tgz"
+-  integrity sha512-RkhPPp2zrqDAQA/2jNhnztcPAlv64XdhIp7a7454A5ovI7Bukxgt7MX7udwAu3zg1DcpPU0rz3VV1SeaqvY4+A==
+-
+-"@nodelib/fs.walk@^1.2.3":
+-  version "1.2.8"
+-  resolved "https://registry.npmjs.org/@nodelib/fs.walk/-/fs.walk-1.2.8.tgz"
+-  integrity sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==
+-  dependencies:
+-    "@nodelib/fs.scandir" "2.1.5"
+-    fastq "^1.6.0"
+-
+-"@pkgjs/parseargs@^0.11.0":
+-  version "0.11.0"
+-  resolved "https://registry.npmjs.org/@pkgjs/parseargs/-/parseargs-0.11.0.tgz"
+-  integrity sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==
+-
+-"@tailwindcss/forms@^0.5.2":
+-  version "0.5.10"
+-  resolved "https://registry.npmjs.org/@tailwindcss/forms/-/forms-0.5.10.tgz"
+-  integrity sha512-utI1ONF6uf/pPNO68kmN1b8rEwNXv3czukalo8VtJH8ksIkZXr3Q3VYudZLkCsDd4Wku120uF02hYK25XGPorw==
+-  dependencies:
+-    mini-svg-data-uri "^1.2.3"
+-
+-"@vue/reactivity@~3.1.1":
+-  version "3.1.5"
+-  resolved "https://registry.npmjs.org/@vue/reactivity/-/reactivity-3.1.5.tgz"
+-  integrity sha512-1tdfLmNjWG6t/CsPldh+foumYFo3cpyCHgBYQ34ylaMsJ+SNHQ1kApMIa8jN+i593zQuaw3AdWH0nJTARzCFhg==
+-  dependencies:
+-    "@vue/shared" "3.1.5"
+-
+-"@vue/shared@3.1.5":
+-  version "3.1.5"
+-  resolved "https://registry.npmjs.org/@vue/shared/-/shared-3.1.5.tgz"
+-  integrity sha512-oJ4F3TnvpXaQwZJNF3ZK+kLPHKarDmJjJ6jyzVNDKH9md1dptjC7lWR//jrGuLdek/U6iltWxqAnYOu8gCiOvA==
+-
+-alpinejs@^3.13.10:
+-  version "3.14.9"
+-  resolved "https://registry.npmjs.org/alpinejs/-/alpinejs-3.14.9.tgz"
+-  integrity sha512-gqSOhTEyryU9FhviNqiHBHzgjkvtukq9tevew29fTj+ofZtfsYriw4zPirHHOAy9bw8QoL3WGhyk7QqCh5AYlw==
+-  dependencies:
+-    "@vue/reactivity" "~3.1.1"
+-
+-ansi-regex@^5.0.1:
+-  version "5.0.1"
+-  resolved "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz"
+-  integrity sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==
+-
+-ansi-regex@^6.0.1:
+-  version "6.1.0"
+-  resolved "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.1.0.tgz"
+-  integrity sha512-7HSX4QQb4CspciLpVFwyRe79O3xsIZDDLER21kERQ71oaPodF8jL725AgJMFAYbooIqolJoRLuM81SpeUkpkvA==
+-
+-ansi-styles@^4.0.0:
+-  version "4.3.0"
+-  resolved "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz"
+-  integrity sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==
+-  dependencies:
+-    color-convert "^2.0.1"
+-
+-ansi-styles@^6.1.0:
+-  version "6.2.1"
+-  resolved "https://registry.npmjs.org/ansi-styles/-/ansi-styles-6.2.1.tgz"
+-  integrity sha512-bN798gFfQX+viw3R7yrGWRqnrN2oRkEkUjjl4JNn4E8GxxbjtG3FbrEIIY3l8/hrwUwIeCZvi4QuOTP4MErVug==
+-
+-any-promise@^1.0.0:
+-  version "1.3.0"
+-  resolved "https://registry.npmjs.org/any-promise/-/any-promise-1.3.0.tgz"
+-  integrity sha512-7UvmKalWRt1wgjL1RrGxoSJW/0QZFIegpeGvZG9kjp8vrRu55XTHbwnqq2GpXm9uLbcuhxm3IqX9OB4MZR1b2A==
+-
+-anymatch@~3.1.2:
+-  version "3.1.3"
+-  resolved "https://registry.npmjs.org/anymatch/-/anymatch-3.1.3.tgz"
+-  integrity sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==
+-  dependencies:
+-    normalize-path "^3.0.0"
+-    picomatch "^2.0.4"
+-
+-arg@^5.0.2:
+-  version "5.0.2"
+-  resolved "https://registry.npmjs.org/arg/-/arg-5.0.2.tgz"
+-  integrity sha512-PYjyFOLKQ9y57JvQ6QLo8dAgNqswh8M1RMJYdQduT6xbWSgK36P/Z/v+p888pM69jMMfS8Xd8F6I1kQ/I9HUGg==
+-
+-asynckit@^0.4.0:
+-  version "0.4.0"
+-  resolved "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz"
+-  integrity sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==
+-
+-autoprefixer@^10.4.17:
+-  version "10.4.21"
+-  resolved "https://registry.npmjs.org/autoprefixer/-/autoprefixer-10.4.21.tgz"
+-  integrity sha512-O+A6LWV5LDHSJD3LjHYoNi4VLsj/Whi7k6zG12xTYaU4cQ8oxQGckXNX8cRHK5yOZ/ppVHe0ZBXGzSV9jXdVbQ==
+-  dependencies:
+-    browserslist "^4.24.4"
+-    caniuse-lite "^1.0.30001702"
+-    fraction.js "^4.3.7"
+-    normalize-range "^0.1.2"
+-    picocolors "^1.1.1"
+-    postcss-value-parser "^4.2.0"
+-
+-axios@^1.6.7:
+-  version "1.9.0"
+-  resolved "https://registry.npmjs.org/axios/-/axios-1.9.0.tgz"
+-  integrity sha512-re4CqKTJaURpzbLHtIi6XpDv20/CnpXOtjRY5/CU32L8gU8ek9UIivcfvSWvmKEngmVbrUtPpdDwWDWL7DNHvg==
+-  dependencies:
+-    follow-redirects "^1.15.6"
+-    form-data "^4.0.0"
+-    proxy-from-env "^1.1.0"
+-
+-balanced-match@^1.0.0:
+-  version "1.0.2"
+-  resolved "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz"
+-  integrity sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==
+-
+-binary-extensions@^2.0.0:
+-  version "2.3.0"
+-  resolved "https://registry.npmjs.org/binary-extensions/-/binary-extensions-2.3.0.tgz"
+-  integrity sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==
+-
+-brace-expansion@^2.0.1:
+-  version "2.0.2"
+-  resolved "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.0.2.tgz"
+-  integrity sha512-Jt0vHyM+jmUBqojB7E1NIYadt0vI0Qxjxd2TErW94wDz+E2LAm5vKMXXwg6ZZBTHPuUlDgQHKXvjGBdfcF1ZDQ==
+-  dependencies:
+-    balanced-match "^1.0.0"
+-
+-braces@^3.0.3, braces@~3.0.2:
+-  version "3.0.3"
+-  resolved "https://registry.npmjs.org/braces/-/braces-3.0.3.tgz"
+-  integrity sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==
+-  dependencies:
+-    fill-range "^7.1.1"
+-
+-browserslist@^4.24.4, "browserslist@>= 4.21.0":
+-  version "4.25.0"
+-  resolved "https://registry.npmjs.org/browserslist/-/browserslist-4.25.0.tgz"
+-  integrity sha512-PJ8gYKeS5e/whHBh8xrwYK+dAvEj7JXtz6uTucnMRB8OiGTsKccFekoRrjajPBHV8oOY+2tI4uxeceSimKwMFA==
+-  dependencies:
+-    caniuse-lite "^1.0.30001718"
+-    electron-to-chromium "^1.5.160"
+-    node-releases "^2.0.19"
+-    update-browserslist-db "^1.1.3"
+-
+-call-bind-apply-helpers@^1.0.1, call-bind-apply-helpers@^1.0.2:
+-  version "1.0.2"
+-  resolved "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz"
+-  integrity sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==
+-  dependencies:
+-    es-errors "^1.3.0"
+-    function-bind "^1.1.2"
+-
+-camelcase-css@^2.0.1:
+-  version "2.0.1"
+-  resolved "https://registry.npmjs.org/camelcase-css/-/camelcase-css-2.0.1.tgz"
+-  integrity sha512-QOSvevhslijgYwRx6Rv7zKdMF8lbRmx+uQGx2+vDc+KI/eBnsy9kit5aj23AgGu3pa4t9AgwbnXWqS+iOY+2aA==
+-
+-caniuse-lite@^1.0.30001702, caniuse-lite@^1.0.30001718:
+-  version "1.0.30001722"
+-  resolved "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001722.tgz"
+-  integrity sha512-DCQHBBZtiK6JVkAGw7drvAMK0Q0POD/xZvEmDp6baiMMP6QXXk9HpD6mNYBZWhOPG6LvIDb82ITqtWjhDckHCA==
+-
+-chokidar@^3.6.0:
+-  version "3.6.0"
+-  resolved "https://registry.npmjs.org/chokidar/-/chokidar-3.6.0.tgz"
+-  integrity sha512-7VT13fmjotKpGipCW9JEQAusEPE+Ei8nl6/g4FBAmIm0GOOLMua9NDDo/DWp0ZAxCr3cPq5ZpBqmPAQgDda2Pw==
+-  dependencies:
+-    anymatch "~3.1.2"
+-    braces "~3.0.2"
+-    glob-parent "~5.1.2"
+-    is-binary-path "~2.1.0"
+-    is-glob "~4.0.1"
+-    normalize-path "~3.0.0"
+-    readdirp "~3.6.0"
+-  optionalDependencies:
+-    fsevents "~2.3.2"
+-
+-color-convert@^2.0.1:
+-  version "2.0.1"
+-  resolved "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz"
+-  integrity sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==
+-  dependencies:
+-    color-name "~1.1.4"
+-
+-color-name@~1.1.4:
+-  version "1.1.4"
+-  resolved "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz"
+-  integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
+-
+-combined-stream@^1.0.8:
+-  version "1.0.8"
+-  resolved "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz"
+-  integrity sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==
+-  dependencies:
+-    delayed-stream "~1.0.0"
+-
+-commander@^4.0.0:
+-  version "4.1.1"
+-  resolved "https://registry.npmjs.org/commander/-/commander-4.1.1.tgz"
+-  integrity sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==
+-
+-cross-spawn@^7.0.6:
+-  version "7.0.6"
+-  resolved "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz"
+-  integrity sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==
+-  dependencies:
+-    path-key "^3.1.0"
+-    shebang-command "^2.0.0"
+-    which "^2.0.1"
+-
+-cssesc@^3.0.0:
+-  version "3.0.0"
+-  resolved "https://registry.npmjs.org/cssesc/-/cssesc-3.0.0.tgz"
+-  integrity sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==
+-
+-delayed-stream@~1.0.0:
+-  version "1.0.0"
+-  resolved "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz"
+-  integrity sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==
+-
+-didyoumean@^1.2.2:
+-  version "1.2.2"
+-  resolved "https://registry.npmjs.org/didyoumean/-/didyoumean-1.2.2.tgz"
+-  integrity sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==
+-
+-dlv@^1.1.3:
+-  version "1.1.3"
+-  resolved "https://registry.npmjs.org/dlv/-/dlv-1.1.3.tgz"
+-  integrity sha512-+HlytyjlPKnIG8XuRG8WvmBP8xs8P71y+SKKS6ZXWoEgLuePxtDoUEiH7WkdePWrQ5JBpE6aoVqfZfJUQkjXwA==
+-
+-dunder-proto@^1.0.1:
+-  version "1.0.1"
+-  resolved "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz"
+-  integrity sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==
+-  dependencies:
+-    call-bind-apply-helpers "^1.0.1"
+-    es-errors "^1.3.0"
+-    gopd "^1.2.0"
+-
+-eastasianwidth@^0.2.0:
+-  version "0.2.0"
+-  resolved "https://registry.npmjs.org/eastasianwidth/-/eastasianwidth-0.2.0.tgz"
+-  integrity sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==
+-
+-electron-to-chromium@^1.5.160:
+-  version "1.5.166"
+-  resolved "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.166.tgz"
+-  integrity sha512-QPWqHL0BglzPYyJJ1zSSmwFFL6MFXhbACOCcsCdUMCkzPdS9/OIBVxg516X/Ado2qwAq8k0nJJ7phQPCqiaFAw==
+-
+-emoji-regex@^8.0.0:
+-  version "8.0.0"
+-  resolved "https://registry.npmjs.org/emoji-regex/-/emoji-regex-8.0.0.tgz"
+-  integrity sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==
+-
+-emoji-regex@^9.2.2:
+-  version "9.2.2"
+-  resolved "https://registry.npmjs.org/emoji-regex/-/emoji-regex-9.2.2.tgz"
+-  integrity sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==
+-
+-es-define-property@^1.0.1:
+-  version "1.0.1"
+-  resolved "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz"
+-  integrity sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==
+-
+-es-errors@^1.3.0:
+-  version "1.3.0"
+-  resolved "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz"
+-  integrity sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==
+-
+-es-object-atoms@^1.0.0, es-object-atoms@^1.1.1:
+-  version "1.1.1"
+-  resolved "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz"
+-  integrity sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA==
+-  dependencies:
+-    es-errors "^1.3.0"
+-
+-es-set-tostringtag@^2.1.0:
+-  version "2.1.0"
+-  resolved "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz"
+-  integrity sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==
+-  dependencies:
+-    es-errors "^1.3.0"
+-    get-intrinsic "^1.2.6"
+-    has-tostringtag "^1.0.2"
+-    hasown "^2.0.2"
+-
+-esbuild@^0.18.10:
+-  version "0.18.20"
+-  resolved "https://registry.npmjs.org/esbuild/-/esbuild-0.18.20.tgz"
+-  integrity sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA==
+-  optionalDependencies:
+-    "@esbuild/android-arm" "0.18.20"
+-    "@esbuild/android-arm64" "0.18.20"
+-    "@esbuild/android-x64" "0.18.20"
+-    "@esbuild/darwin-arm64" "0.18.20"
+-    "@esbuild/darwin-x64" "0.18.20"
+-    "@esbuild/freebsd-arm64" "0.18.20"
+-    "@esbuild/freebsd-x64" "0.18.20"
+-    "@esbuild/linux-arm" "0.18.20"
+-    "@esbuild/linux-arm64" "0.18.20"
+-    "@esbuild/linux-ia32" "0.18.20"
+-    "@esbuild/linux-loong64" "0.18.20"
+-    "@esbuild/linux-mips64el" "0.18.20"
+-    "@esbuild/linux-ppc64" "0.18.20"
+-    "@esbuild/linux-riscv64" "0.18.20"
+-    "@esbuild/linux-s390x" "0.18.20"
+-    "@esbuild/linux-x64" "0.18.20"
+-    "@esbuild/netbsd-x64" "0.18.20"
+-    "@esbuild/openbsd-x64" "0.18.20"
+-    "@esbuild/sunos-x64" "0.18.20"
+-    "@esbuild/win32-arm64" "0.18.20"
+-    "@esbuild/win32-ia32" "0.18.20"
+-    "@esbuild/win32-x64" "0.18.20"
+-
+-escalade@^3.2.0:
+-  version "3.2.0"
+-  resolved "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz"
+-  integrity sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==
+-
+-fast-glob@^3.3.2:
+-  version "3.3.3"
+-  resolved "https://registry.npmjs.org/fast-glob/-/fast-glob-3.3.3.tgz"
+-  integrity sha512-7MptL8U0cqcFdzIzwOTHoilX9x5BrNqye7Z/LuC7kCMRio1EMSyqRK3BEAUD7sXRq4iT4AzTVuZdhgQ2TCvYLg==
+-  dependencies:
+-    "@nodelib/fs.stat" "^2.0.2"
+-    "@nodelib/fs.walk" "^1.2.3"
+-    glob-parent "^5.1.2"
+-    merge2 "^1.3.0"
+-    micromatch "^4.0.8"
+-
+-fastq@^1.6.0:
+-  version "1.19.1"
+-  resolved "https://registry.npmjs.org/fastq/-/fastq-1.19.1.tgz"
+-  integrity sha512-GwLTyxkCXjXbxqIhTsMI2Nui8huMPtnxg7krajPJAjnEG/iiOS7i+zCtWGZR9G0NBKbXKh6X9m9UIsYX/N6vvQ==
+-  dependencies:
+-    reusify "^1.0.4"
+-
+-fill-range@^7.1.1:
+-  version "7.1.1"
+-  resolved "https://registry.npmjs.org/fill-range/-/fill-range-7.1.1.tgz"
+-  integrity sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==
+-  dependencies:
+-    to-regex-range "^5.0.1"
+-
+-follow-redirects@^1.15.6:
+-  version "1.15.9"
+-  resolved "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.15.9.tgz"
+-  integrity sha512-gew4GsXizNgdoRyqmyfMHyAmXsZDk6mHkSxZFCzW9gwlbtOW44CDtYavM+y+72qD/Vq2l550kMF52DT8fOLJqQ==
+-
+-foreground-child@^3.1.0:
+-  version "3.3.1"
+-  resolved "https://registry.npmjs.org/foreground-child/-/foreground-child-3.3.1.tgz"
+-  integrity sha512-gIXjKqtFuWEgzFRJA9WCQeSJLZDjgJUOMCMzxtvFq/37KojM1BFGufqsCy0r4qSQmYLsZYMeyRqzIWOMup03sw==
+-  dependencies:
+-    cross-spawn "^7.0.6"
+-    signal-exit "^4.0.1"
+-
+-form-data@^4.0.0:
+-  version "4.0.3"
+-  resolved "https://registry.npmjs.org/form-data/-/form-data-4.0.3.tgz"
+-  integrity sha512-qsITQPfmvMOSAdeyZ+12I1c+CKSstAFAwu+97zrnWAbIr5u8wfsExUzCesVLC8NgHuRUqNN4Zy6UPWUTRGslcA==
+-  dependencies:
+-    asynckit "^0.4.0"
+-    combined-stream "^1.0.8"
+-    es-set-tostringtag "^2.1.0"
+-    hasown "^2.0.2"
+-    mime-types "^2.1.12"
+-
+-fraction.js@^4.3.7:
+-  version "4.3.7"
+-  resolved "https://registry.npmjs.org/fraction.js/-/fraction.js-4.3.7.tgz"
+-  integrity sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==
+-
+-function-bind@^1.1.2:
+-  version "1.1.2"
+-  resolved "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz"
+-  integrity sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==
+-
+-get-intrinsic@^1.2.6:
+-  version "1.3.0"
+-  resolved "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz"
+-  integrity sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==
+-  dependencies:
+-    call-bind-apply-helpers "^1.0.2"
+-    es-define-property "^1.0.1"
+-    es-errors "^1.3.0"
+-    es-object-atoms "^1.1.1"
+-    function-bind "^1.1.2"
+-    get-proto "^1.0.1"
+-    gopd "^1.2.0"
+-    has-symbols "^1.1.0"
+-    hasown "^2.0.2"
+-    math-intrinsics "^1.1.0"
+-
+-get-proto@^1.0.1:
+-  version "1.0.1"
+-  resolved "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz"
+-  integrity sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==
+-  dependencies:
+-    dunder-proto "^1.0.1"
+-    es-object-atoms "^1.0.0"
+-
+-glob-parent@^5.1.2:
+-  version "5.1.2"
+-  resolved "https://registry.npmjs.org/glob-parent/-/glob-parent-5.1.2.tgz"
+-  integrity sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==
+-  dependencies:
+-    is-glob "^4.0.1"
+-
+-glob-parent@^6.0.2:
+-  version "6.0.2"
+-  resolved "https://registry.npmjs.org/glob-parent/-/glob-parent-6.0.2.tgz"
+-  integrity sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A==
+-  dependencies:
+-    is-glob "^4.0.3"
+-
+-glob-parent@~5.1.2:
+-  version "5.1.2"
+-  resolved "https://registry.npmjs.org/glob-parent/-/glob-parent-5.1.2.tgz"
+-  integrity sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==
+-  dependencies:
+-    is-glob "^4.0.1"
+-
+-glob@^10.3.10:
+-  version "10.4.5"
+-  resolved "https://registry.npmjs.org/glob/-/glob-10.4.5.tgz"
+-  integrity sha512-7Bv8RF0k6xjo7d4A/PxYLbUCfb6c+Vpd2/mB2yRDlew7Jb5hEXiCD9ibfO7wpk8i4sevK6DFny9h7EYbM3/sHg==
+-  dependencies:
+-    foreground-child "^3.1.0"
+-    jackspeak "^3.1.2"
+-    minimatch "^9.0.4"
+-    minipass "^7.1.2"
+-    package-json-from-dist "^1.0.0"
+-    path-scurry "^1.11.1"
+-
+-gopd@^1.2.0:
+-  version "1.2.0"
+-  resolved "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz"
+-  integrity sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==
+-
+-has-symbols@^1.0.3, has-symbols@^1.1.0:
+-  version "1.1.0"
+-  resolved "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz"
+-  integrity sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==
+-
+-has-tostringtag@^1.0.2:
+-  version "1.0.2"
+-  resolved "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz"
+-  integrity sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==
+-  dependencies:
+-    has-symbols "^1.0.3"
+-
+-hasown@^2.0.2:
+-  version "2.0.2"
+-  resolved "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz"
+-  integrity sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==
+-  dependencies:
+-    function-bind "^1.1.2"
+-
+-is-binary-path@~2.1.0:
+-  version "2.1.0"
+-  resolved "https://registry.npmjs.org/is-binary-path/-/is-binary-path-2.1.0.tgz"
+-  integrity sha512-ZMERYes6pDydyuGidse7OsHxtbI7WVeUEozgR/g7rd0xUimYNlvZRE/K2MgZTjWy725IfelLeVcEM97mmtRGXw==
+-  dependencies:
+-    binary-extensions "^2.0.0"
+-
+-is-core-module@^2.16.0:
+-  version "2.16.1"
+-  resolved "https://registry.npmjs.org/is-core-module/-/is-core-module-2.16.1.tgz"
+-  integrity sha512-UfoeMA6fIJ8wTYFEUjelnaGI67v6+N7qXJEvQuIGa99l4xsCruSYOVSQ0uPANn4dAzm8lkYPaKLrrijLq7x23w==
+-  dependencies:
+-    hasown "^2.0.2"
+-
+-is-extglob@^2.1.1:
+-  version "2.1.1"
+-  resolved "https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz"
+-  integrity sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==
+-
+-is-fullwidth-code-point@^3.0.0:
+-  version "3.0.0"
+-  resolved "https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz"
+-  integrity sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==
+-
+-is-glob@^4.0.1, is-glob@^4.0.3, is-glob@~4.0.1:
+-  version "4.0.3"
+-  resolved "https://registry.npmjs.org/is-glob/-/is-glob-4.0.3.tgz"
+-  integrity sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg==
+-  dependencies:
+-    is-extglob "^2.1.1"
+-
+-is-number@^7.0.0:
+-  version "7.0.0"
+-  resolved "https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz"
+-  integrity sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==
+-
+-isexe@^2.0.0:
+-  version "2.0.0"
+-  resolved "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz"
+-  integrity sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==
+-
+-jackspeak@^3.1.2:
+-  version "3.4.3"
+-  resolved "https://registry.npmjs.org/jackspeak/-/jackspeak-3.4.3.tgz"
+-  integrity sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==
+-  dependencies:
+-    "@isaacs/cliui" "^8.0.2"
+-  optionalDependencies:
+-    "@pkgjs/parseargs" "^0.11.0"
+-
+-jiti@^1.21.6:
+-  version "1.21.7"
+-  resolved "https://registry.npmjs.org/jiti/-/jiti-1.21.7.tgz"
+-  integrity sha512-/imKNG4EbWNrVjoNC/1H5/9GFy+tqjGBHCaSsN+P2RnPqjsLmv6UD3Ej+Kj8nBWaRAwyk7kK5ZUc+OEatnTR3A==
+-
+-laravel-vite-plugin@^0.8.1:
+-  version "0.8.1"
+-  resolved "https://registry.npmjs.org/laravel-vite-plugin/-/laravel-vite-plugin-0.8.1.tgz"
+-  integrity sha512-fxzUDjOA37kOsYq8dP+3oPIlw8/kJVXwu0hOXLun82R1LpV02shGeWGYKx2lbpKffL5I0sfPPjfqbYxuqBluAA==
+-  dependencies:
+-    picocolors "^1.0.0"
+-    vite-plugin-full-reload "^1.0.5"
+-
+-lilconfig@^3.0.0, lilconfig@^3.1.3:
+-  version "3.1.3"
+-  resolved "https://registry.npmjs.org/lilconfig/-/lilconfig-3.1.3.tgz"
+-  integrity sha512-/vlFKAoH5Cgt3Ie+JLhRbwOsCQePABiU3tJ1egGvyQ+33R/vcwM2Zl2QR/LzjsBeItPt3oSVXapn+m4nQDvpzw==
+-
+-lines-and-columns@^1.1.6:
+-  version "1.2.4"
+-  resolved "https://registry.npmjs.org/lines-and-columns/-/lines-and-columns-1.2.4.tgz"
+-  integrity sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==
+-
+-lru-cache@^10.2.0:
+-  version "10.4.3"
+-  resolved "https://registry.npmjs.org/lru-cache/-/lru-cache-10.4.3.tgz"
+-  integrity sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==
+-
+-math-intrinsics@^1.1.0:
+-  version "1.1.0"
+-  resolved "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz"
+-  integrity sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==
+-
+-merge2@^1.3.0:
+-  version "1.4.1"
+-  resolved "https://registry.npmjs.org/merge2/-/merge2-1.4.1.tgz"
+-  integrity sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==
+-
+-micromatch@^4.0.8:
+-  version "4.0.8"
+-  resolved "https://registry.npmjs.org/micromatch/-/micromatch-4.0.8.tgz"
+-  integrity sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==
+-  dependencies:
+-    braces "^3.0.3"
+-    picomatch "^2.3.1"
+-
+-mime-db@1.52.0:
+-  version "1.52.0"
+-  resolved "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz"
+-  integrity sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==
+-
+-mime-types@^2.1.12:
+-  version "2.1.35"
+-  resolved "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz"
+-  integrity sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==
+-  dependencies:
+-    mime-db "1.52.0"
+-
+-mini-svg-data-uri@^1.2.3:
+-  version "1.4.4"
+-  resolved "https://registry.npmjs.org/mini-svg-data-uri/-/mini-svg-data-uri-1.4.4.tgz"
+-  integrity sha512-r9deDe9p5FJUPZAk3A59wGH7Ii9YrjjWw0jmw/liSbHl2CHiyXj6FcDXDu2K3TjVAXqiJdaw3xxwlZZr9E6nHg==
+-
+-minimatch@^9.0.4:
+-  version "9.0.5"
+-  resolved "https://registry.npmjs.org/minimatch/-/minimatch-9.0.5.tgz"
+-  integrity sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow==
+-  dependencies:
+-    brace-expansion "^2.0.1"
+-
+-"minipass@^5.0.0 || ^6.0.2 || ^7.0.0", minipass@^7.1.2:
+-  version "7.1.2"
+-  resolved "https://registry.npmjs.org/minipass/-/minipass-7.1.2.tgz"
+-  integrity sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==
+-
+-mz@^2.7.0:
+-  version "2.7.0"
+-  resolved "https://registry.npmjs.org/mz/-/mz-2.7.0.tgz"
+-  integrity sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==
+-  dependencies:
+-    any-promise "^1.0.0"
+-    object-assign "^4.0.1"
+-    thenify-all "^1.0.0"
+-
+-nanoid@^3.3.11:
+-  version "3.3.11"
+-  resolved "https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz"
+-  integrity sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==
+-
+-node-releases@^2.0.19:
+-  version "2.0.19"
+-  resolved "https://registry.npmjs.org/node-releases/-/node-releases-2.0.19.tgz"
+-  integrity sha512-xxOWJsBKtzAq7DY0J+DTzuz58K8e7sJbdgwkbMWQe8UYB6ekmsQ45q0M/tJDsGaZmbC+l7n57UV8Hl5tHxO9uw==
+-
+-normalize-path@^3.0.0, normalize-path@~3.0.0:
+-  version "3.0.0"
+-  resolved "https://registry.npmjs.org/normalize-path/-/normalize-path-3.0.0.tgz"
+-  integrity sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==
+-
+-normalize-range@^0.1.2:
+-  version "0.1.2"
+-  resolved "https://registry.npmjs.org/normalize-range/-/normalize-range-0.1.2.tgz"
+-  integrity sha512-bdok/XvKII3nUpklnV6P2hxtMNrCboOjAcyBuQnWEhO665FwrSNRxU+AqpsyvO6LgGYPspN+lu5CLtw4jPRKNA==
+-
+-object-assign@^4.0.1:
+-  version "4.1.1"
+-  resolved "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz"
+-  integrity sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==
+-
+-object-hash@^3.0.0:
+-  version "3.0.0"
+-  resolved "https://registry.npmjs.org/object-hash/-/object-hash-3.0.0.tgz"
+-  integrity sha512-RSn9F68PjH9HqtltsSnqYC1XXoWe9Bju5+213R98cNGttag9q9yAOTzdbsqvIa7aNm5WffBZFpWYr2aWrklWAw==
+-
+-package-json-from-dist@^1.0.0:
+-  version "1.0.1"
+-  resolved "https://registry.npmjs.org/package-json-from-dist/-/package-json-from-dist-1.0.1.tgz"
+-  integrity sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==
+-
+-path-key@^3.1.0:
+-  version "3.1.1"
+-  resolved "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz"
+-  integrity sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==
+-
+-path-parse@^1.0.7:
+-  version "1.0.7"
+-  resolved "https://registry.npmjs.org/path-parse/-/path-parse-1.0.7.tgz"
+-  integrity sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw==
+-
+-path-scurry@^1.11.1:
+-  version "1.11.1"
+-  resolved "https://registry.npmjs.org/path-scurry/-/path-scurry-1.11.1.tgz"
+-  integrity sha512-Xa4Nw17FS9ApQFJ9umLiJS4orGjm7ZzwUrwamcGQuHSzDyth9boKDaycYdDcZDuqYATXw4HFXgaqWTctW/v1HA==
+-  dependencies:
+-    lru-cache "^10.2.0"
+-    minipass "^5.0.0 || ^6.0.2 || ^7.0.0"
+-
+-picocolors@^1.0.0, picocolors@^1.1.1:
+-  version "1.1.1"
+-  resolved "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz"
+-  integrity sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==
+-
+-picomatch@^2.0.4, picomatch@^2.2.1, picomatch@^2.3.1:
+-  version "2.3.1"
+-  resolved "https://registry.npmjs.org/picomatch/-/picomatch-2.3.1.tgz"
+-  integrity sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==
+-
+-pify@^2.3.0:
+-  version "2.3.0"
+-  resolved "https://registry.npmjs.org/pify/-/pify-2.3.0.tgz"
+-  integrity sha512-udgsAY+fTnvv7kI7aaxbqwWNb0AHiB0qBO89PZKPkoTmGOgdbrHDKD+0B2X4uTfJ/FT1R09r9gTsjUjNJotuog==
+-
+-pirates@^4.0.1:
+-  version "4.0.7"
+-  resolved "https://registry.npmjs.org/pirates/-/pirates-4.0.7.tgz"
+-  integrity sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==
+-
+-postcss-import@^15.1.0:
+-  version "15.1.0"
+-  resolved "https://registry.npmjs.org/postcss-import/-/postcss-import-15.1.0.tgz"
+-  integrity sha512-hpr+J05B2FVYUAXHeK1YyI267J/dDDhMU6B6civm8hSY1jYJnBXxzKDKDswzJmtLHryrjhnDjqqp/49t8FALew==
+-  dependencies:
+-    postcss-value-parser "^4.0.0"
+-    read-cache "^1.0.0"
+-    resolve "^1.1.7"
+-
+-postcss-js@^4.0.1:
+-  version "4.0.1"
+-  resolved "https://registry.npmjs.org/postcss-js/-/postcss-js-4.0.1.tgz"
+-  integrity sha512-dDLF8pEO191hJMtlHFPRa8xsizHaM82MLfNkUHdUtVEV3tgTp5oj+8qbEqYM57SLfc74KSbw//4SeJma2LRVIw==
+-  dependencies:
+-    camelcase-css "^2.0.1"
+-
+-postcss-load-config@^4.0.2:
+-  version "4.0.2"
+-  resolved "https://registry.npmjs.org/postcss-load-config/-/postcss-load-config-4.0.2.tgz"
+-  integrity sha512-bSVhyJGL00wMVoPUzAVAnbEoWyqRxkjv64tUl427SKnPrENtq6hJwUojroMz2VB+Q1edmi4IfrAPpami5VVgMQ==
+-  dependencies:
+-    lilconfig "^3.0.0"
+-    yaml "^2.3.4"
+-
+-postcss-nested@^6.2.0:
+-  version "6.2.0"
+-  resolved "https://registry.npmjs.org/postcss-nested/-/postcss-nested-6.2.0.tgz"
+-  integrity sha512-HQbt28KulC5AJzG+cZtj9kvKB93CFCdLvog1WFLf1D+xmMvPGlBstkpTEZfK5+AN9hfJocyBFCNiqyS48bpgzQ==
+-  dependencies:
+-    postcss-selector-parser "^6.1.1"
+-
+-postcss-selector-parser@^6.1.1, postcss-selector-parser@^6.1.2:
+-  version "6.1.2"
+-  resolved "https://registry.npmjs.org/postcss-selector-parser/-/postcss-selector-parser-6.1.2.tgz"
+-  integrity sha512-Q8qQfPiZ+THO/3ZrOrO0cJJKfpYCagtMUkXbnEfmgUjwXg6z/WBeOyS9APBBPCTSiDV+s4SwQGu8yFsiMRIudg==
+-  dependencies:
+-    cssesc "^3.0.0"
+-    util-deprecate "^1.0.2"
+-
+-postcss-value-parser@^4.0.0, postcss-value-parser@^4.2.0:
+-  version "4.2.0"
+-  resolved "https://registry.npmjs.org/postcss-value-parser/-/postcss-value-parser-4.2.0.tgz"
+-  integrity sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==
+-
+-postcss@^8.0.0, postcss@^8.1.0, postcss@^8.2.14, postcss@^8.4.21, postcss@^8.4.27, postcss@^8.4.31, postcss@^8.4.47, postcss@>=8.0.9:
+-  version "8.5.5"
+-  resolved "https://registry.npmjs.org/postcss/-/postcss-8.5.5.tgz"
+-  integrity sha512-d/jtm+rdNT8tpXuHY5MMtcbJFBkhXE6593XVR9UoGCH8jSFGci7jGvMGH5RYd5PBJW+00NZQt6gf7CbagJCrhg==
+-  dependencies:
+-    nanoid "^3.3.11"
+-    picocolors "^1.1.1"
+-    source-map-js "^1.2.1"
+-
+-proxy-from-env@^1.1.0:
+-  version "1.1.0"
+-  resolved "https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-1.1.0.tgz"
+-  integrity sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==
+-
+-queue-microtask@^1.2.2:
+-  version "1.2.3"
+-  resolved "https://registry.npmjs.org/queue-microtask/-/queue-microtask-1.2.3.tgz"
+-  integrity sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==
+-
+-read-cache@^1.0.0:
+-  version "1.0.0"
+-  resolved "https://registry.npmjs.org/read-cache/-/read-cache-1.0.0.tgz"
+-  integrity sha512-Owdv/Ft7IjOgm/i0xvNDZ1LrRANRfew4b2prF3OWMQLxLfu3bS8FVhCsrSCMK4lR56Y9ya+AThoTpDCTxCmpRA==
+-  dependencies:
+-    pify "^2.3.0"
+-
+-readdirp@~3.6.0:
+-  version "3.6.0"
+-  resolved "https://registry.npmjs.org/readdirp/-/readdirp-3.6.0.tgz"
+-  integrity sha512-hOS089on8RduqdbhvQ5Z37A0ESjsqz6qnRcffsMU3495FuTdqSm+7bhJ29JvIOsBDEEnan5DPu9t3To9VRlMzA==
+-  dependencies:
+-    picomatch "^2.2.1"
+-
+-resolve@^1.1.7, resolve@^1.22.8:
+-  version "1.22.10"
+-  resolved "https://registry.npmjs.org/resolve/-/resolve-1.22.10.tgz"
+-  integrity sha512-NPRy+/ncIMeDlTAsuqwKIiferiawhefFJtkNSW0qZJEqMEb+qBt/77B/jGeeek+F0uOeN05CDa6HXbbIgtVX4w==
+-  dependencies:
+-    is-core-module "^2.16.0"
+-    path-parse "^1.0.7"
+-    supports-preserve-symlinks-flag "^1.0.0"
+-
+-reusify@^1.0.4:
+-  version "1.1.0"
+-  resolved "https://registry.npmjs.org/reusify/-/reusify-1.1.0.tgz"
+-  integrity sha512-g6QUff04oZpHs0eG5p83rFLhHeV00ug/Yf9nZM6fLeUrPguBTkTQOdpAWWspMh55TZfVQDPaN3NQJfbVRAxdIw==
+-
+-rollup@^3.27.1:
+-  version "3.29.5"
+-  resolved "https://registry.npmjs.org/rollup/-/rollup-3.29.5.tgz"
+-  integrity sha512-GVsDdsbJzzy4S/v3dqWPJ7EfvZJfCHiDqe80IyrF59LYuP+e6U1LJoUqeuqRbwAWoMNoXivMNeNAOf5E22VA1w==
+-  optionalDependencies:
+-    fsevents "~2.3.2"
+-
+-run-parallel@^1.1.9:
+-  version "1.2.0"
+-  resolved "https://registry.npmjs.org/run-parallel/-/run-parallel-1.2.0.tgz"
+-  integrity sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==
+-  dependencies:
+-    queue-microtask "^1.2.2"
+-
+-shebang-command@^2.0.0:
+-  version "2.0.0"
+-  resolved "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz"
+-  integrity sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==
+-  dependencies:
+-    shebang-regex "^3.0.0"
+-
+-shebang-regex@^3.0.0:
+-  version "3.0.0"
+-  resolved "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz"
+-  integrity sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==
+-
+-signal-exit@^4.0.1:
+-  version "4.1.0"
+-  resolved "https://registry.npmjs.org/signal-exit/-/signal-exit-4.1.0.tgz"
+-  integrity sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==
+-
+-source-map-js@^1.2.1:
+-  version "1.2.1"
+-  resolved "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz"
+-  integrity sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==
+-
+-"string-width-cjs@npm:string-width@^4.2.0":
+-  version "4.2.3"
+-  resolved "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz"
+-  integrity sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==
+-  dependencies:
+-    emoji-regex "^8.0.0"
+-    is-fullwidth-code-point "^3.0.0"
+-    strip-ansi "^6.0.1"
+-
+-string-width@^4.1.0:
+-  version "4.2.3"
+-  resolved "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz"
+-  integrity sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==
+-  dependencies:
+-    emoji-regex "^8.0.0"
+-    is-fullwidth-code-point "^3.0.0"
+-    strip-ansi "^6.0.1"
+-
+-string-width@^5.0.1, string-width@^5.1.2:
+-  version "5.1.2"
+-  resolved "https://registry.npmjs.org/string-width/-/string-width-5.1.2.tgz"
+-  integrity sha512-HnLOCR3vjcY8beoNLtcjZ5/nxn2afmME6lhrDrebokqMap+XbeW8n9TXpPDOqdGK5qcI3oT0GKTW6wC7EMiVqA==
+-  dependencies:
+-    eastasianwidth "^0.2.0"
+-    emoji-regex "^9.2.2"
+-    strip-ansi "^7.0.1"
+-
+-"strip-ansi-cjs@npm:strip-ansi@^6.0.1":
+-  version "6.0.1"
+-  resolved "https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz"
+-  integrity sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==
+-  dependencies:
+-    ansi-regex "^5.0.1"
+-
+-strip-ansi@^6.0.0, strip-ansi@^6.0.1:
+-  version "6.0.1"
+-  resolved "https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz"
+-  integrity sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==
+-  dependencies:
+-    ansi-regex "^5.0.1"
+-
+-strip-ansi@^7.0.1:
+-  version "7.1.0"
+-  resolved "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.1.0.tgz"
+-  integrity sha512-iq6eVVI64nQQTRYq2KtEg2d2uU7LElhTJwsH4YzIHZshxlgZms/wIc4VoDQTlG/IvVIrBKG06CrZnp0qv7hkcQ==
+-  dependencies:
+-    ansi-regex "^6.0.1"
+-
+-sucrase@^3.35.0:
+-  version "3.35.0"
+-  resolved "https://registry.npmjs.org/sucrase/-/sucrase-3.35.0.tgz"
+-  integrity sha512-8EbVDiu9iN/nESwxeSxDKe0dunta1GOlHufmSSXxMD2z2/tMZpDMpvXQGsc+ajGo8y2uYUmixaSRUc/QPoQ0GA==
+-  dependencies:
+-    "@jridgewell/gen-mapping" "^0.3.2"
+-    commander "^4.0.0"
+-    glob "^10.3.10"
+-    lines-and-columns "^1.1.6"
+-    mz "^2.7.0"
+-    pirates "^4.0.1"
+-    ts-interface-checker "^0.1.9"
+-
+-supports-preserve-symlinks-flag@^1.0.0:
+-  version "1.0.0"
+-  resolved "https://registry.npmjs.org/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz"
+-  integrity sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==
+-
+-tailwindcss@^3.4.1, "tailwindcss@>=3.0.0 || >= 3.0.0-alpha.1 || >= 4.0.0-alpha.20 || >= 4.0.0-beta.1":
+-  version "3.4.17"
+-  resolved "https://registry.npmjs.org/tailwindcss/-/tailwindcss-3.4.17.tgz"
+-  integrity sha512-w33E2aCvSDP0tW9RZuNXadXlkHXqFzSkQew/aIa2i/Sj8fThxwovwlXHSPXTbAHwEIhBFXAedUhP2tueAKP8Og==
+-  dependencies:
+-    "@alloc/quick-lru" "^5.2.0"
+-    arg "^5.0.2"
+-    chokidar "^3.6.0"
+-    didyoumean "^1.2.2"
+-    dlv "^1.1.3"
+-    fast-glob "^3.3.2"
+-    glob-parent "^6.0.2"
+-    is-glob "^4.0.3"
+-    jiti "^1.21.6"
+-    lilconfig "^3.1.3"
+-    micromatch "^4.0.8"
+-    normalize-path "^3.0.0"
+-    object-hash "^3.0.0"
+-    picocolors "^1.1.1"
+-    postcss "^8.4.47"
+-    postcss-import "^15.1.0"
+-    postcss-js "^4.0.1"
+-    postcss-load-config "^4.0.2"
+-    postcss-nested "^6.2.0"
+-    postcss-selector-parser "^6.1.2"
+-    resolve "^1.22.8"
+-    sucrase "^3.35.0"
+-
+-thenify-all@^1.0.0:
+-  version "1.6.0"
+-  resolved "https://registry.npmjs.org/thenify-all/-/thenify-all-1.6.0.tgz"
+-  integrity sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==
+-  dependencies:
+-    thenify ">= 3.1.0 < 4"
+-
+-"thenify@>= 3.1.0 < 4":
+-  version "3.3.1"
+-  resolved "https://registry.npmjs.org/thenify/-/thenify-3.3.1.tgz"
+-  integrity sha512-RVZSIV5IG10Hk3enotrhvz0T9em6cyHBLkH/YAZuKqd8hRkKhSfCGIcP2KUY0EPxndzANBmNllzWPwak+bheSw==
+-  dependencies:
+-    any-promise "^1.0.0"
+-
+-to-regex-range@^5.0.1:
+-  version "5.0.1"
+-  resolved "https://registry.npmjs.org/to-regex-range/-/to-regex-range-5.0.1.tgz"
+-  integrity sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==
+-  dependencies:
+-    is-number "^7.0.0"
+-
+-ts-interface-checker@^0.1.9:
+-  version "0.1.13"
+-  resolved "https://registry.npmjs.org/ts-interface-checker/-/ts-interface-checker-0.1.13.tgz"
+-  integrity sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==
+-
+-update-browserslist-db@^1.1.3:
+-  version "1.1.3"
+-  resolved "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.1.3.tgz"
+-  integrity sha512-UxhIZQ+QInVdunkDAaiazvvT/+fXL5Osr0JZlJulepYu6Jd7qJtDZjlur0emRlT71EN3ScPoE7gvsuIKKNavKw==
+-  dependencies:
+-    escalade "^3.2.0"
+-    picocolors "^1.1.1"
+-
+-util-deprecate@^1.0.2:
+-  version "1.0.2"
+-  resolved "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz"
+-  integrity sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==
+-
+-vite-plugin-full-reload@^1.0.5:
+-  version "1.2.0"
+-  resolved "https://registry.npmjs.org/vite-plugin-full-reload/-/vite-plugin-full-reload-1.2.0.tgz"
+-  integrity sha512-kz18NW79x0IHbxRSHm0jttP4zoO9P9gXh+n6UTwlNKnviTTEpOlum6oS9SmecrTtSr+muHEn5TUuC75UovQzcA==
+-  dependencies:
+-    picocolors "^1.0.0"
+-    picomatch "^2.3.1"
+-
+-"vite@^3.0.0 || ^4.0.0", vite@^4.5.14:
+-  version "4.5.14"
+-  resolved "https://registry.npmjs.org/vite/-/vite-4.5.14.tgz"
+-  integrity sha512-+v57oAaoYNnO3hIu5Z/tJRZjq5aHM2zDve9YZ8HngVHbhk66RStobhb1sqPMIPEleV6cNKYK4eGrAbE9Ulbl2g==
+-  dependencies:
+-    esbuild "^0.18.10"
+-    postcss "^8.4.27"
+-    rollup "^3.27.1"
+-  optionalDependencies:
+-    fsevents "~2.3.2"
+-
+-which@^2.0.1:
+-  version "2.0.2"
+-  resolved "https://registry.npmjs.org/which/-/which-2.0.2.tgz"
+-  integrity sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==
+-  dependencies:
+-    isexe "^2.0.0"
+-
+-"wrap-ansi-cjs@npm:wrap-ansi@^7.0.0":
+-  version "7.0.0"
+-  resolved "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-7.0.0.tgz"
+-  integrity sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==
+-  dependencies:
+-    ansi-styles "^4.0.0"
+-    string-width "^4.1.0"
+-    strip-ansi "^6.0.0"
+-
+-wrap-ansi@^8.1.0:
+-  version "8.1.0"
+-  resolved "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-8.1.0.tgz"
+-  integrity sha512-si7QWI6zUMq56bESFvagtmzMdGOtoxfR+Sez11Mobfc7tm+VkUckk9bW2UeffTGVUbOksxmSw0AA2gs8g71NCQ==
+-  dependencies:
+-    ansi-styles "^6.1.0"
+-    string-width "^5.0.1"
+-    strip-ansi "^7.0.1"
+-
+-yaml@^2.3.4:
+-  version "2.8.0"
+-  resolved "https://registry.npmjs.org/yaml/-/yaml-2.8.0.tgz"
+-  integrity sha512-4lLa/EcQCB0cJkyts+FpIRx5G/llPxfP6VQU5KByHEhLxY3IJCH0f0Hy1MHI8sClTvsIb8qwRJ6R/ZdlDJ/leQ==
