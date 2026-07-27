@@ -154,7 +154,7 @@ index 635f914..f2bff3e 100644
 -        //         ->withErrors(['msg' => $e->getMessage()])
 -        //         ->withInput();
 -        // }
-+        return redirect()->route('order.list')
++        return redirect()->route('order.index')
 +            ->with('status', 'Order created successfully.');
      }
  
