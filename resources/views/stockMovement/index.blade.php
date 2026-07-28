@@ -303,195 +303,297 @@
         }
     </style> -->
     <style>
-    body {
-        margin: 0;
-        font-family: Arial, "Microsoft JhengHei", sans-serif;
-        background: #f3f6fb;
-        color: #1f2d3d;
-    }
+        body {
+            margin: 0;
+            font-family: Arial, "Microsoft JhengHei", sans-serif;
+            background: #f3f6fb;
+            color: #1f2d3d;
+        }
 
-    .page {
-        width: 1180px;
-        margin: 50px auto;
-    }
+        .page {
+            width: 1180px;
+            margin: 50px auto;
+        }
 
-    h1 {
-        font-size: 28px;
-        margin-bottom: 10px;
-    }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
 
-    .desc {
-        color: #6b7280;
-        margin-bottom: 25px;
-    }
+        .desc {
+            color: #6b7280;
+            margin-bottom: 25px;
+        }
 
-    .card {
-        background: #fff;
-        border: 1px solid #d9e2ef;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,.04);
-    }
+        .card {
+            background: #fff;
+            border: 1px solid #d9e2ef;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.04);
+        }
 
-    .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 22px 26px;
-        border-bottom: 1px solid #e5e7eb;
-        font-weight: bold;
-    }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 22px 26px;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: bold;
+        }
 
-    .btn-primary {
-        background: #315be8;
-        color: white;
-        border: none;
-        padding: 12px 22px;
-        border-radius: 6px;
-        font-weight: bold;
-        cursor: pointer;
-    }
+        .btn-primary {
+            background: #315be8;
+            color: white;
+            border: none;
+            padding: 12px 22px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
 
-    .filters {
-        display: flex;
-        gap: 18px;
-        padding: 24px 26px;
-        border-bottom: 1px solid #e5e7eb;
-        align-items: end;
-    }
+        .filters {
+            display: flex;
+            gap: 18px;
+            padding: 24px 26px;
+            border-bottom: 1px solid #e5e7eb;
+            align-items: end;
+        }
 
-    .filter-group {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
 
-    label {
-        font-size: 14px;
-        color: #4b5563;
-    }
+        label {
+            font-size: 14px;
+            color: #4b5563;
+        }
 
-    select,
-    input {
-        height: 38px;
-        border: 1px solid #cfd8e3;
-        border-radius: 6px;
-        padding: 0 12px;
-        min-width: 150px;
-    }
+        select,
+        input {
+            height: 38px;
+            border: 1px solid #cfd8e3;
+            border-radius: 6px;
+            padding: 0 12px;
+            min-width: 150px;
+        }
 
-    .search-input {
-        min-width: 280px;
-    }
+        .search-input {
+            min-width: 280px;
+        }
 
-    .btn-search {
-        background: #315be8;
-        color: white;
-        border: none;
-        height: 38px;
-        padding: 0 20px;
-        border-radius: 6px;
-        cursor: pointer;
-    }
+        .btn-search {
+            background: #315be8;
+            color: white;
+            border: none;
+            height: 38px;
+            padding: 0 20px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
 
-    .btn-reset {
-        background: #e5e7eb;
-        color: #374151;
-        border: none;
-        height: 38px;
-        padding: 0 20px;
-        border-radius: 6px;
-        cursor: pointer;
-    }
+        .btn-reset {
+            background: #e5e7eb;
+            color: #374151;
+            border: none;
+            height: 38px;
+            padding: 0 20px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
 
-    .table-area {
-        padding: 24px 26px;
-    }
+        .table-area {
+            padding: 24px 26px;
+        }
 
-    .table-top {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 18px;
-    }
+        .table-top {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
 
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-    }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
 
-    th {
-        text-align: left;
-        padding: 14px 10px;
-        border-bottom: 1px solid #9ca3af;
-    }
+        th {
+            text-align: left;
+            padding: 14px 10px;
+            border-bottom: 1px solid #9ca3af;
+        }
 
-    td {
-        padding: 14px 10px;
-        border-bottom: 1px solid #e5e7eb;
-    }
+        td {
+            padding: 14px 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
 
-    .badge {
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 13px;
-        font-weight: bold;
-    }
+        .badge {
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+        }
 
-    .ok {
-        background: #d1fae5;
-        color: #059669;
-    }
+        .ok {
+            background: #d1fae5;
+            color: #059669;
+        }
 
-    .low {
-        background: #fef3c7;
-        color: #d97706;
-    }
+        .low {
+            background: #fef3c7;
+            color: #d97706;
+        }
 
-    .empty {
-        background: #fee2e2;
-        color: #dc2626;
-    }
+        .empty {
+            background: #fee2e2;
+            color: #dc2626;
+        }
 
-    .btn-detail {
-        background: #6366f1;
-        color: white;
-        border: none;
-        padding: 8px 14px;
-        border-radius: 5px;
-        cursor: pointer;
-    }
+        .btn-detail {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
 
-    .summary-row td {
-        font-weight: bold;
-        border-top: 1px solid #9ca3af;
-    }
+        .summary-row td {
+            font-weight: bold;
+            border-top: 1px solid #9ca3af;
+        }
 
-    .footer {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 20px;
-    }
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
 
-    .pagination button {
-        border: 1px solid #cfd8e3;
-        background: white;
-        padding: 8px 12px;
-        border-radius: 4px;
-        margin-left: 4px;
-    }
+        .pagination button {
+            border: 1px solid #cfd8e3;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-left: 4px;
+        }
     </style>
     <script>
 
-        // 監聽月份變更
-        $('#month').on('change', function() {
-            month = this.value;
-            fetchSalesByProductData(month);
-        });
+        // $('#month').on('change', function() {
+        //     month = this.value;
+        //     fetchSalesByProductData(month);
+        // });
 
-        function fetchStockRange(){
+        // function fetchStockRange(){
 
-        }
-    </script>
+        // }
+
+            const currentYear = new Date().getFullYear();
+            console.log(currentYear);
+
+            // 第一次進入頁面，自動設定為今年一整年
+            const startDate = currentYear + '-01-01';
+            const endDate = currentYear + '-12-31';
+            console.log(startDate, endDate);
+
+            // 取資料
+            $.ajax({
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                url: "{{ route('stock_movement.list') }}",
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    startDate: startDate,
+                    endDate: endDate,
+                },
+                success: function(response) {
+                    console.log(response);
+                    renderTablefunction (response.data)
+                },
+                error: function(xhr, status, error) {
+                    console.log(xhr, status, error);
+                }
+            });
+
+            function renderTablefunction (stockMoment){
+
+                if ($.fn.DataTable.isDataTable('#stockMovementTable')) {
+                    $('#stockMovementTable').DataTable().destroy();
+                }
+                const stockMovementTable = $('#stockMovementTable').DataTable({
+                    "data": stockMoment,
+                    "columns": [ // 列的標題一般是從DOM中讀取（也可以使用這個屬性為表格創建列標題)
+                        { 
+                            data:"stockMovementID",
+                            title: "ID" 
+                        },
+                        { 
+                            data:"productID",
+                            title: "商品編號"
+
+                        },
+                        { 
+                            data:"productName",
+                            title: "商品名稱"
+
+                        },
+                        { 
+                            data:"classification",
+                            title: "分類"
+
+                        },
+                        { 
+                            data:"unit",
+                            title: "單位"
+
+                        },
+                        { 
+                            data:"balance",
+                            title: "庫存數量"
+
+                        },
+                        { 
+                            data:"safetyStockAmount",
+                            title: "安全庫存"
+
+                        },
+                        { 
+                            data:"type",
+                            title: "狀態"
+
+                        },
+                        { 
+                            data:"created_at",
+                            title: "最近異動時間"
+
+                        },
+                        {
+                            data: null,
+                            title: '操作',
+                            orderable: false,
+                            searchable: false,
+                            render: function (data, type, row) {
+                                return `
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary btn-detail"
+                                        data-id="${row.stockMovementID}"
+                                    >
+                                        查看異動
+                                    </button>
+                                `;
+                            }
+                        }
+                    ]
+                });
+            }
+
+</script>
 @endsection
 
 <x-app-layout>
@@ -508,7 +610,7 @@
         <div class="card">
             <div class="card-header">
                 <div class="breadcrumb">📦 庫存管理 / 庫存列表</div>
-                <button class="btn-primary">＋ 新增庫存異動</button>
+                <a href="{{ route('stock_movement.new') }}" class="btn-primary">＋ 新增庫存異動</a>
             </div>
 
             <div class="filters">
@@ -567,7 +669,7 @@
                     </div>
                 </div>
 
-                <table>
+                <table id="stockMovementTable">
                     <thead>
                         <tr>
                             <th>ID</th>

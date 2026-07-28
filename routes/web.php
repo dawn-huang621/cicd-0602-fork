@@ -36,8 +36,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('stock-movement')->group(function () {
-        Route::get('/index', [StockMovementController::class, 'list'])->name('stock_movement.list');
-        Route::post('/store', [StockMovementController::class, 'store'])->name('stock_movement.store');
+        Route::get('/index', [StockMovementController::class, 'index'])->name('stock_movement.index');
+        Route::post('/data', [StockMovementController::class, 'list'])->name('stock_movement.list');
+        // Route::get('/create', [StockMovementController::class, 'create'])->name('stock_movement.new');
+        // Route::post('/store', [StockMovementController::class, 'store'])->name('stock_movement.store');
     });
 
     Route::prefix('customer')->group(function () {
