@@ -16,7 +16,7 @@ class OrderItem extends Authenticatable
      * @var array
      */
     protected $fillable = [
-        'amount', 'product_id',
+        'amount', 'price', 'product_id', 'order_id',
     ];
 
     /**
