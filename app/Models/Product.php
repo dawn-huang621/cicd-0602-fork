@@ -36,4 +36,9 @@ class Product extends Authenticatable
      */
     protected $casts = [
     ];
+
+    public function orderItems()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
 }
