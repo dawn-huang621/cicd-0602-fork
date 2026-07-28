@@ -41,4 +41,14 @@ class Product extends Authenticatable
     {
         return $this->hasMany(OrderItem::class);
     }
+
+    public function stock()
+    {
+        return $this->hasOne(Stock::class);
+    }
+    
+    public function stockMovement()
+    {
+        return $this->hasMany(StockMovement::class);
+    }
 }
