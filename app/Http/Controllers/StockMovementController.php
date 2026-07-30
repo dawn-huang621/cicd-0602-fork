@@ -51,16 +51,16 @@ class StockMovementController extends Controller
         ]);
     }
 
-    // public function create(){
+    public function create(){
 
-    //     $products = Product::with('stock')->get();
+        $products = Product::with('stock')->get();
         
-    //     // $products = Product::with('stock')->all();
-    //     // dd($products, $user);
-    //     return view('stockMovement.new', [
-    //                                         'products' => $products
-    //                                     ]);
-    // }
+        // $products = Product::with('stock')->all();
+        // dd($products, $user);
+        return view('stockMovement.new', [
+                                            'products' => $products
+                                        ]);
+    }
 
     // public function store(Request $request){
     //     $userId = Auth::id();
