@@ -5,19 +5,21 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use DB;
 use App\Models\Product;
+use App\Models\Stock;
 use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
 {
     function list()
     {
-        $result = DB::table('products')->get();
-        return view('product.index', ['products' => $result]);
+        $products = Product::with('stock')->get();
+        
+        return view('products.index', compact('products'));
     }
 
     function create()
     {
-        return view('product.new');
+        return view('products.new');
     }
     
     function store(Request $request)

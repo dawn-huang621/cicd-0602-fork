@@ -36,4 +36,19 @@ class Product extends Authenticatable
      */
     protected $casts = [
     ];
+
+    public function orderItems()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function stock()
+    {
+        return $this->hasOne(Stock::class);
+    }
+    
+    public function stockMovement()
+    {
+        return $this->hasMany(StockMovement::class);
+    }
 }

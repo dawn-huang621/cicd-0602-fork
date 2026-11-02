@@ -21,20 +21,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('order')->group(function () {
-            
-        // Route::get('/', function () { return view('order.list');})->name('order');
-        Route::get('/index', [OrderController::class, 'list'])->name('order.list');
+        Route::get('/index', [OrderController::class, 'index'])->name('order.index');
         Route::get('/create', [OrderController::class, 'create'])->name('order.new');
         Route::post('/store', [OrderController::class, 'store'])->name('order.store');
         Route::get('/show/{id}', [OrderController::class, 'show'])->name('order.show');
-        // Route::post('/show/{id}/detail', [OrderController::class, 'showDetail'])->name('order.detail');
-        // Route::post('/orders/{id}/review', [OrderController::class, 'approveOrder'])->name('orders.review');
-        // Route::post('/orders/{id}/dispatch', [OrderController::class, 'dispatchOrder'])->name('orders.dispatch');
-        // Route::post('/orders/fetchByDateRange', [OrderController::class, 'fetchByDateRange'])->name('orders.fetchByDateRange');
+        Route::post('/show/{id}/detail', [OrderController::class, 'showDetail'])->name('order.detail');
+        Route::post('/orders/{id}/review', [OrderController::class, 'approveOrder'])->name('orders.review');
+        Route::post('/orders/{id}/dispatch', [OrderController::class, 'dispatchOrder'])->name('orders.dispatch');
+        Route::post('/orders/fetchByDateRange', [OrderController::class, 'fetchByDateRange'])->name('orders.fetchByDateRange');
+    });
+
+    Route::prefix('report')->group(function () {
+        Route::get('/orders', [ReportController::class, 'orders'])->name('reports.orders');
     });
 
     Route::prefix('stock-movement')->group(function () {
-        Route::get('/index', [StockMovementController::class, 'list'])->name('stock_movement.list');
+        Route::get('/index', [StockMovementController::class, 'index'])->name('stock_movement.index');
+        Route::post('/data', [StockMovementController::class, 'list'])->name('stock_movement.list');
+        Route::get('/create', [StockMovementController::class, 'create'])->name('stock_movement.new');
         Route::post('/store', [StockMovementController::class, 'store'])->name('stock_movement.store');
     });
 

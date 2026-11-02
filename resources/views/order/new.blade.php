@@ -1,184 +1,207 @@
 @section('jshead')
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const productlist = @json($productjs); 
-        const tbody = document.getElementById('items');
-        const subtotalEl = document.getElementById('subtotal');
-        const taxEl = document.getElementById('tax');
-        const totalEl = document.getElementById('total');
-        let row = 1;
+    document.addEventListener('DOMContentLoaded', () => {
+        const products = @json($productjs);
+        const itemsBody = document.getElementById('items');
+        const itemTemplate = document.getElementById('item-row-template');
+        const addItemButton = document.getElementById('add-item');
+        const orderTotal = document.getElementById('order-total');
+        const money = new Intl.NumberFormat('zh-TW');
+        let nextRowIndex = itemsBody.querySelectorAll('.item-row').length;
 
-        // 重新計算所有小計的總和、稅金、總金額
+        const productPrice = (productId) => Number(products[productId]?.price ?? 0);
+
+        function updateRow(row) {
+            const productId = row.querySelector('.product-select').value;
+            const quantity = Math.max(1, Number.parseInt(row.querySelector('.quantity-input').value, 10) || 1);
+            const price = productPrice(productId);
+
+            row.querySelector('.quantity-input').value = quantity;
+            row.querySelector('.unit-price').textContent = `$${money.format(price)}`;
+            row.querySelector('.subtotal').textContent = `$${money.format(price * quantity)}`;
+            row.dataset.subtotal = price * quantity;
+        }
+
         function updateTotal() {
-            let totalSubtotal = 0;
-            tbody.querySelectorAll('tr').forEach(row => {
-                const sub = parseFloat(row.querySelector('.subtotal')?.textContent || 0);
-                totalSubtotal += sub;
+            const total = [...itemsBody.querySelectorAll('.item-row')]
+                .reduce((sum, row) => sum + Number(row.dataset.subtotal || 0), 0);
+
+            orderTotal.textContent = `$${money.format(total)}`;
+        }
+
+        function refreshRow(row) {
+            updateRow(row);
+            updateTotal();
+        }
+
+        function updateRemoveButtons() {
+            const rows = itemsBody.querySelectorAll('.item-row');
+            rows.forEach((row) => {
+                const button = row.querySelector('.remove-item');
+                button.disabled = rows.length === 1;
+                button.classList.toggle('opacity-40', rows.length === 1);
+                button.classList.toggle('cursor-not-allowed', rows.length === 1);
             });
-
-            const tax = Math.round(totalSubtotal * 0.05); // 5% 稅金，可依需求調整
-            const total = totalSubtotal + tax;
-
-            subtotalEl.textContent = `$${totalSubtotal}`;
-            taxEl.textContent = `$${tax}`;
-            totalEl.textContent = `$${total}`;
         }
 
-        // 更新單一列的小計（單價 * 數量）
-        function updateSubtotal(rowEl) {
-            const productSelect = rowEl.querySelector('select');
-            const quantityInput = rowEl.querySelector('input[name$="[quantities]"]');
-            const subtotalSpan = rowEl.querySelector('.subtotal');
+        addItemButton.addEventListener('click', () => {
+            const row = itemTemplate.content.firstElementChild.cloneNode(true);
+            row.querySelector('.product-select').name = `products[${nextRowIndex}][product_id]`;
+            row.querySelector('.quantity-input').name = `products[${nextRowIndex}][quantities]`;
+            nextRowIndex += 1;
 
-            const productId = productSelect.value;
-            const price = productlist[productId]?.price || 0;
-            const quantity = parseFloat(quantityInput.value) || 0;
-            const subtotal = price * quantity;
+            itemsBody.appendChild(row);
+            refreshRow(row);
+            updateRemoveButtons();
+        });
 
-            subtotalSpan.textContent = subtotal;
-
-            updateTotal(); // 每次更新小計都更新總計
-        }
-
-        // 綁定事件：產品變動時
-        tbody.addEventListener('change', function (e) {
-            if (e.target.tagName === 'SELECT') {
-                const rowEl = e.target.closest('tr');
-                updateSubtotal(rowEl);
+        itemsBody.addEventListener('change', (event) => {
+            if (event.target.matches('.product-select, .quantity-input')) {
+                refreshRow(event.target.closest('.item-row'));
             }
         });
 
-        // 綁定事件：數量變動時
-        tbody.addEventListener('input', function (e) {
-            if (e.target.name.includes('[quantities]')) {
-                const rowEl = e.target.closest('tr');
-                updateSubtotal(rowEl);
+        itemsBody.addEventListener('input', (event) => {
+            if (event.target.matches('.quantity-input')) {
+                refreshRow(event.target.closest('.item-row'));
             }
         });
 
-        // 新增一列商品
-        document.getElementById("addProduct").addEventListener('click', function () {
-            const trEl = document.createElement('tr');
-            trEl.innerHTML = `
-                <td class="border p-2">
-                    <select name="products[${row}][product_id]" class="w-full border-gray-300 rounded">
-                        @foreach($products as $product)
-                            <option value="{{ $product->id }}">{{$product->name}}</option>
-                        @endforeach
-                    </select>
-                </td>
-                <td class="border p-2 text-right">
-                    <input type="number" name="products[${row}][quantities]" value="1" class="w-20 text-right border-gray-300 rounded">
-                </td>
-                <td class="border p-2 text-right">
-                    <span class="subtotal">0</span>
-                </td>
-            `;
-            tbody.appendChild(trEl);
-            updateSubtotal(trEl);
-            row++;
+        itemsBody.addEventListener('click', (event) => {
+            const button = event.target.closest('.remove-item');
+            if (!button || button.disabled) return;
+
+            button.closest('.item-row').remove();
+            updateTotal();
+            updateRemoveButtons();
         });
 
-        // 頁面載入後先更新一次
-        updateSubtotal(tbody.querySelector('tr'));
+        itemsBody.querySelectorAll('.item-row').forEach(updateRow);
+        updateTotal();
+        updateRemoveButtons();
     });
 </script>
 @endsection
 
-
-
 <x-app-layout>
-    <form action="{{ route('order.store') }}" method="post">
-    @csrf
-        
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('新增產品') }}
+            {{ __('新增訂單') }}
         </h2>
     </x-slot>
 
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-md">
-        <h2 class="text-xl font-semibold mb-4">新增訂單</h2>
+    <form action="{{ route('order.store') }}" method="post">
+        @csrf
 
-        <!-- 客戶與訂單資訊 -->
-        <div class="grid grid-cols-3 gap-4 mb-6">
-        <div>
-            <label for="customer" class="block text-sm font-medium text-gray-700">選擇客戶</label>
-            <select id="customer" name="customer" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm">
-            <option value="">-</option>
-            @foreach($customers as $customer)
-            <option value="{{ $customer->id }}">{{ $customer->name }}</option>
-            <!-- <option>陳大文</option> -->
-            @endforeach
-            </select>
-        </div>
-        <div>
-            <label for="date" class="block text-sm font-medium text-gray-700">日期</label>
-            <input type="date" id="date" name="date" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm">
-        </div>
-        <!-- <div>
-            <label for="order_number" class="block text-sm font-medium text-gray-700">訂單編號</label>
-            <input type="text" id="order_number" name="order_number" value="O13535678" readonly class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm bg-gray-100">
-        </div> -->
-        </div>
+        <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-xl font-semibold mb-4">新增訂單</h2>
 
-        <!-- 商品項目列表 -->
-        <table class="w-full text-sm border border-gray-300 mb-4">
-        <thead class="bg-gray-50">
-            <tr>
-            <th class="border p-2 text-left">商品</th>
-            <th class="border p-2 text-right">數量</th>
-            <!-- <th class="border p-2 text-right">單價</th> -->
-            <th class="border p-2 text-right">小計</th>
-            </tr>
-        </thead>
-        <tbody id="items">
-            <tr>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label for="customer" class="block text-sm font-medium text-gray-700">客戶</label>
+                    <select id="customer" name="customer" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm" required>
+                        <option value="">請選擇客戶</option>
+                        @foreach($customers as $customer)
+                            <option value="{{ $customer->id }}" @selected(old('customer') == $customer->id)>
+                                {{ $customer->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
+                    <label for="date" class="block text-sm font-medium text-gray-700">訂單日期</label>
+                    <input type="date" id="date" name="date" value="{{ old('date', now()->toDateString()) }}"
+                           class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm" required>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto mb-3">
+                <table class="w-full min-w-[720px] text-sm border border-gray-300">
+                    <thead class="bg-gray-50 text-gray-700">
+                        <tr>
+                            <th class="border p-2 text-left">商品</th>
+                            <th class="border p-2 text-right w-28">數量</th>
+                            <th class="border p-2 text-right w-32">單價</th>
+                            <th class="border p-2 text-right w-36">小計</th>
+                            <th class="border p-2 text-center w-24">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="items">
+                        @php($oldProducts = old('products', [['product_id' => $products->first()?->id, 'quantities' => 1]]))
+                        @foreach($oldProducts as $index => $oldProduct)
+                            <tr class="item-row">
+                                <td class="border p-2">
+                                    <select name="products[{{ $index }}][product_id]" class="product-select w-full border-gray-300 rounded" required>
+                                        @foreach($products as $product)
+                                            <option value="{{ $product->id }}" @selected(($oldProduct['product_id'] ?? null) == $product->id)>
+                                                {{ $product->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </td>
+                                <td class="border p-2 text-right">
+                                    <input type="number" name="products[{{ $index }}][quantities]"
+                                           value="{{ $oldProduct['quantities'] ?? 1 }}" min="1" step="1"
+                                           class="quantity-input w-20 text-right border-gray-300 rounded" required>
+                                </td>
+                                <td class="unit-price border p-2 text-right whitespace-nowrap">$0</td>
+                                <td class="subtotal border p-2 text-right font-medium whitespace-nowrap">$0</td>
+                                <td class="border p-2 text-center">
+                                    <button type="button" class="remove-item text-red-600 hover:text-red-800 font-medium">移除</button>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <button type="button" id="add-item"
+                    class="inline-flex items-center px-3 py-2 mb-5 text-sm font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                ＋ 新增品項
+            </button>
+
+            <div class="flex justify-end mb-6">
+                <div class="w-full sm:w-72 flex justify-between border-t border-gray-300 pt-3 text-base font-semibold">
+                    <span>訂單總額</span>
+                    <span id="order-total">$0</span>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label for="note" class="block text-sm font-medium text-gray-700">備註</label>
+                <textarea id="note" name="note" rows="3" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm">{{ old('note') }}</textarea>
+            </div>
+
+            <div class="flex justify-end">
+                
+                <button type="submit"
+                        class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500
+                        bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 ">
+                    新增
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <template id="item-row-template">
+        <tr class="item-row">
             <td class="border p-2">
-                <select name="products[0][product_id]" class="w-full border-gray-300 rounded">
+                <select class="product-select w-full border-gray-300 rounded" required>
                     @foreach($products as $product)
-                        <option value="{{ $product->id }}">{{$product->name}}</option>
+                        <option value="{{ $product->id }}">{{ $product->name }}</option>
                     @endforeach
-                <!-- <option value="2">商品 B</option> -->
                 </select>
             </td>
             <td class="border p-2 text-right">
-                <input type="number" name="products[0][quantities]" value="1" class="w-20 text-right border-gray-300 rounded">
+                <input type="number" value="1" min="1" step="1"
+                       class="quantity-input w-20 text-right border-gray-300 rounded" required>
             </td>
-            <!-- <td class="border p-2 text-right">
-                <input type="number" name="products[0][prices]" value="100" class="w-24 text-right border-gray-300 rounded">
-            </td> -->
-            <td class="border p-2 text-right">
-                <span class="subtotal">100</span>
+            <td class="unit-price border p-2 text-right whitespace-nowrap">$0</td>
+            <td class="subtotal border p-2 text-right font-medium whitespace-nowrap">$0</td>
+            <td class="border p-2 text-center">
+                <button type="button" class="remove-item text-red-600 hover:text-red-800 font-medium">移除</button>
             </td>
-            </tr>
-        </tbody>
-        </table>
-
-        <a href="javascript:;" class="mb-4 text-indigo-600 hover:underline text-sm" id="addProduct">+ 新增商品</a>
-
-        <!-- 總金額區塊 -->
-        <div class="text-right text-sm mb-6">
-        <div>小計：<span id="subtotal">$1000</span></div>
-        <div>稅金：<span id="tax">$50</span></div>
-        <div class="font-semibold">總計：<span id="total">$1050</span></div>
-        </div>
-
-        <!-- 備註與按鈕 -->
-        <div class="mb-4">
-        <label for="note" class="block text-sm font-medium text-gray-700">備註</label>
-        <textarea id="note" name="note" rows="3" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm"></textarea>
-        </div>
-
-        <div class="flex justify-end gap-2">
-        <!-- <button class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                        bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 ">取消</button>
-        <button class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                        bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 ">儲存草稿</button> -->
-        <button class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-xl font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                        bg-indigo-500 text-white active:bg-indigo-600 text-xs font-bold uppercase px-3 py-1 rounded outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150">建立訂單</button>
-        </div>
-    </div>
-    </form>
-
+        </tr>
+    </template>
 </x-app-layout>

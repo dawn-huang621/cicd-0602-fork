@@ -16,7 +16,7 @@ class Order extends Authenticatable
      * @var array
      */
     protected $fillable = [
-        'name', 'order_number', 'customer_id'
+        'name', 'order_number', 'customer_id', 'order_date', 'status'
     ];
 
     /**
@@ -33,6 +33,7 @@ class Order extends Authenticatable
      * @var array
      */
     protected $casts = [
+        'order_date' => 'date',
     ];
     
     public function customer()
